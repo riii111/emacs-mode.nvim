@@ -1575,6 +1575,8 @@ cases["M-q leaves alone what Markdown would read differently"] = function()
 		"|- before\n    ```\n    code\n\n  next code\n    ```"
 	)
 	unchanged("|Use `a  b` here.")
+	unchanged("|literal \\` and `a  b`")
+	unchanged("|escaped \\\\`a  b` here")
 	unchanged("|a `x   y` b ``p ` q`` c")
 	unchanged("|aaa\n- bbb")
 	unchanged("|> aaa\n>\n> bbb")

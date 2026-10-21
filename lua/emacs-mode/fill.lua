@@ -326,6 +326,11 @@ local function atoms_of(text)
 	while index < #all do
 		index = index + 1
 		local char = all[index]
+		-- a backslash makes the punctuation after it text: an escaped backtick starts no code span
+		if char == "\\" and all[index + 1] and all[index + 1]:find("^%p$") then
+			char = char .. all[index + 1]
+			index = index + 1
+		end
 		local span_end = char == "`" and code_span_end(all, index)
 		if char == "`" and not span_end then
 			-- backticks that close nothing are text, the whole run of them
