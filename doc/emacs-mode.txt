@@ -1,0 +1,134 @@
+*emacs-mode.txt*  A little Emacs for your Insert mode
+
+==============================================================================
+CONTENTS                                                  *emacs-mode-contents*
+
+  1. Introduction ........................... |emacs-mode-introduction|
+  2. Setup .................................. |emacs-mode-setup|
+  3. Lua API ................................ |emacs-mode-api|
+  4. Keys ................................... |emacs-mode-keys|
+  5. Behavior ............................... |emacs-mode-behavior|
+
+==============================================================================
+1. INTRODUCTION                                       *emacs-mode-introduction*
+
+emacs-mode is an Insert mode with Emacs keys mapped to the buffer, entered
+from Normal mode with a key of your choice and left with <Esc> or CTRL-C.
+Insert mode entered with |i|, |a| or |o| is not changed.
+
+The keys are mapped buffer-locally when the mode starts and the mappings the
+buffer had are put back when it ends, unless something replaced them in the
+meantime. Registers and the clipboard are never read or written.
+
+Requires Neovim 0.12 or later.
+
+==============================================================================
+2. SETUP                                                     *emacs-mode-setup*
+
+>lua
+    require("emacs-mode").setup({
+      start_key = "e",
+      set_mark = { "<C-Space>", "<C-@>" },
+      scroll_duration = 100,
+    })
+<
+                                                       *emacs-mode-start_key*
+start_key ~
+    The Normal mode key that starts the mode, or `false` (the default) to map
+    none. In buffers that are not for editing text (a 'buftype' other than
+    empty, or 'nomodifiable') the key does what it did before. With "e", the
+    |e| motion of Visual and Operator-pending mode stays.
+
+                                                        *emacs-mode-set_mark*
+set_mark ~
+    The keys that set the mark. Terminals send CTRL-SPACE as CTRL-@, and macOS
+    may use CTRL-SPACE to switch the input source.
+
+                                                 *emacs-mode-scroll_duration*
+scroll_duration ~
+    Milliseconds of neoscroll's animation for CTRL-V, ALT-V and CTRL-L when
+    neoscroll.nvim is loaded.
+
+Calling setup() again ends the mode and replaces the earlier setup.
+
+==============================================================================
+3. LUA API                                                     *emacs-mode-api*
+
+start()                                                  *emacs-mode.start()*
+    Starts the mode at the cursor, as |i| does. Returns false in a buffer that
+    is not for editing text or when the mode is on already.
+
+stop()                                                    *emacs-mode.stop()*
+    Ends the mode without leaving Insert mode.
+
+is_active()                                          *emacs-mode.is_active()*
+    Whether the mode is on, for a statusline.
+
+teardown()                                            *emacs-mode.teardown()*
+    Ends the mode and removes the start key and the autocommands.
+
+==============================================================================
+4. KEYS                                                       *emacs-mode-keys*
+
+Moves ~
+    CTRL-F / CTRL-B     next / previous character, across lines
+    CTRL-N / CTRL-P     next / previous screen line, as |gj| / |gk|
+    CTRL-A / CTRL-E     start / end of the line
+    ALT-F / ALT-B       after the end of the next word / start of the word
+    ALT-< / ALT->       start / end of the buffer
+    ALT-{ / ALT-}       previous / next paragraph separator
+    ALT-A / ALT-E       start / end of the sentence
+    CTRL-V / ALT-V      scroll down / up a screen
+    CTRL-L              current line to the middle, top and bottom, in turn
+    ALT-R               cursor to the middle, top and bottom line, in turn
+
+Deleting and killing ~
+    CTRL-D / <Del>      delete the next character, joining lines at the end
+    <BS> / CTRL-H       delete the previous character
+    CTRL-K              kill to the end of the line, or the line break
+    CTRL-U              kill to the start of the line (Readline, not Emacs)
+    ALT-D / ALT-<BS>    kill to where ALT-F / ALT-B go
+    ALT-K               kill to the end of the sentence
+    ALT-Z {char}        kill up to and with the next {char}
+    CTRL-Y              put back the kill at the yank pointer
+    ALT-Y               after CTRL-Y or ALT-Y, put the next older kill instead
+
+Region ~
+    CTRL-SPACE          set the mark (|emacs-mode-set_mark|)
+    CTRL-W              kill the region, or the word before the cursor
+    ALT-W               copy the region into the kill ring
+    CTRL-G              drop the region
+    ALT-H               mark the paragraph
+
+Words ~
+    ALT-T               swap the word at or before the cursor with the next
+    ALT-U / ALT-L / ALT-C   upcase / downcase / capitalize the rest of the word
+    ALT-\ / ALT-SPACE   delete the blanks around the cursor / leave one space
+
+Others ~
+    CTRL-S / CTRL-R     search forward / backward with |/| / |?|
+    CTRL-/ / CTRL-_     undo
+
+ALT-<, ALT->, ALT-{ and ALT-} are also mapped as <M-S-,>, <M-S-.>, <M-S-[>
+and <M-S-]>, the form they take with the kitty keyboard protocol.
+
+==============================================================================
+5. BEHAVIOR                                               *emacs-mode-behavior*
+
+- A character is what |l| and |h| move over, composing characters and emoji
+  sequences included. A word is a run of 'iskeyword' characters; Japanese
+  characters all are word characters.
+- A sentence ends at 。！？．, or at . ! ? before a blank or the end of the
+  line, with the terminators, closing brackets and quotes after it. A
+  paragraph, separated by lines of blanks, ends its last sentence.
+- The kill ring keeps 60 kills for the session, shared by all buffers. Kills
+  in a row join in the order of the text.
+- Each command is one undo step, apart from the text typed around it.
+- The region is highlighted with |hl-Visual|. Moves stretch it; typing and
+  the other commands end it. Typing does not replace it.
+- A completion menu is closed without accepting an item before a command.
+- |i_CTRL-O| runs a Normal mode command and comes back to the mode. Leaving
+  the buffer or the window ends the mode.
+- The cursor is a block while the mode is on ('guicursor').
+
+ vim:tw=78:ts=8:ft=help:norl:
