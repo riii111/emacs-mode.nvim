@@ -322,9 +322,10 @@ local function pass_through(lhs, mapping)
 			vim.api.nvim_feedkeys(typed, noremap and "n" or "m", false)
 		end
 	elseif mapping and mapping.rhs and mapping.rhs ~= "" then
-		local keys_to_feed = mapping.rhs
+		-- <SID> of the script that made the mapping, which this function is not in
+		local keys_to_feed = mapping.rhs:gsub("<SID>", ("<SNR>%d_"):format(mapping.sid or 0))
 		if mapping.expr == 1 then
-			local ok, result = pcall(vim.fn.eval, mapping.rhs)
+			local ok, result = pcall(vim.fn.eval, keys_to_feed)
 			keys_to_feed = ok and tostring(result) or ""
 		end
 		vim.api.nvim_feedkeys(vim.keycode(keys_to_feed), noremap and "n" or "m", false)

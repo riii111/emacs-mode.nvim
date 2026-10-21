@@ -1568,6 +1568,14 @@ cases["M-q leaves alone what Markdown would read differently"] = function()
 	unchanged("|> - item\n> more")
 	unchanged("|---")
 	unchanged("|- aaa\n- bbb")
+	unchanged("- before\n    ```\n    code\n\n  nex|t code\n    ```")
+	check(
+		"|- before\n    ```\n    code\n\n  next code\n    ```",
+		"<C-x>h<M-q>",
+		"|- before\n    ```\n    code\n\n  next code\n    ```"
+	)
+	unchanged("|Use `a  b` here.")
+	unchanged("|a `x   y` b ``p ` q`` c")
 	unchanged("|aaa\n- bbb")
 	unchanged("|> aaa\n>\n> bbb")
 	unchanged("- aaa\n\n|  bbb ccc")
@@ -1576,6 +1584,8 @@ cases["M-q leaves alone what Markdown would read differently"] = function()
 	unchanged("- |before\n  ```\n  code\n  ```")
 	each({
 		{ "# Title\nte|xt\nmore", "<M-q>", "# Title\nte|xt more" },
+		{ "|see `a b c` and more", width_keys(12) .. "<M-q>", "|see `a b c`\nand more" },
+		{ "|a `b\nc` d", "<M-q>", "|a `b c` d" },
 		{ "- |aaa bbb\n  ccc ddd", "<M-q>", "- |aaa bbb ccc ddd" },
 		{ "- |aaa bbb\n  ccc ddd", width_keys(12) .. "<M-q>", "- |aaa bbb\n  ccc ddd" },
 		{ "1. |aaa bbb ccc", width_keys(10) .. "<M-q>", "1. |aaa bbb\n   ccc" },
@@ -1765,6 +1775,26 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 		"global mapping"
 	)
 	pcall(vim.keymap.del, "i", "<Down>")
+	-- an expression that calls a function of the script that mapped it
+	local script = vim.fn.tempname() .. ".vim"
+	vim.fn.writefile({
+		"function! s:Down()",
+		"  call v:lua.emacs_test_down()",
+		"  return ''",
+		"endfunction",
+		"function! EmacsTestMapDown()",
+		"  inoremap <buffer> <expr> <Down> <SID>Down()",
+		"endfunction",
+	}, script)
+	vim.cmd.source(script)
+	eq(
+		1,
+		run(function()
+			vim.fn.EmacsTestMapDown()
+		end),
+		"expression with <SID>"
+	)
+	vim.fn.delete(script)
 	-- without a menu Down moves, and the mapping is back after the mode
 	counted = 0
 	open("x\ny|")

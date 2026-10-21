@@ -62,10 +62,8 @@ end
 
 -- Markdown structure, by line
 
+-- A fence at any indentation: one indented by 4 or more is code in a text paragraph, but a block of a list item.
 local function fence(text)
-	if indent_width(text) >= 4 then
-		return nil
-	end
 	local marks = text:match("^%s*(```+)") or text:match("^%s*(~~~+)")
 	return marks and { char = marks:sub(1, 1), length = #marks }
 end
@@ -211,9 +209,6 @@ local function unit_at(lines, first, count)
 				return skipped(first, last, "table or HTML")
 			elseif not item and (lines[row]:find("^%s*=+%s*$") or lines[row]:find("^%s*%-+%s*$")) then
 				return skipped(first, last, "heading")
-			elseif item and (lines[row]:find("^%s*```") or lines[row]:find("^%s*~~~")) then
-				-- a fence indented by 4 or more is code in a text paragraph, but a block of the list item
-				return skipped(first, last, "block inside a list item")
 			end
 		end
 	end
@@ -291,6 +286,30 @@ local function joined(bodies)
 	return text
 end
 
+-- the index of the last backtick of the code span that starts at the backticks at index of chars, if it closes
+local function code_span_end(all, index)
+	local length = 0
+	while all[index + length] == "`" do
+		length = length + 1
+	end
+	local position = index + length
+	while position <= #all do
+		if all[position] == "`" then
+			local run = 0
+			while all[position + run] == "`" do
+				run = run + 1
+			end
+			if run == length then
+				return position + run - 1
+			end
+			position = position + run
+		else
+			position = position + 1
+		end
+	end
+	return nil
+end
+
 -- Words as { text, gap, cjk }, gap being the space before the word: a run of spaces becomes one, or two where it
 -- followed the end of a sentence with two. Each CJK character is a word of its own.
 local function atoms_of(text)
@@ -302,8 +321,37 @@ local function atoms_of(text)
 			current = nil
 		end
 	end
-	for _, char in ipairs(chars.split(text)) do
-		if char == " " or char == "\t" then
+	local all = chars.split(text)
+	local index = 0
+	while index < #all do
+		index = index + 1
+		local char = all[index]
+		local span_end = char == "`" and code_span_end(all, index)
+		if char == "`" and not span_end then
+			-- backticks that close nothing are text, the whole run of them
+			local run_end = index
+			while all[run_end + 1] == "`" do
+				run_end = run_end + 1
+			end
+			char = table.concat(all, "", index, run_end)
+			index = run_end
+		end
+		if span_end then
+			-- the text of a code span is not touched, and no line breaks in it
+			local span = table.concat(all, "", index, span_end)
+			if current then
+				current.text = current.text .. span
+			else
+				local previous = atoms[#atoms]
+				local gap = ""
+				if previous and pending > 0 then
+					gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
+				end
+				current = { text = span, gap = gap, cjk = false }
+				pending = 0
+			end
+			index = span_end
+		elseif char == " " or char == "\t" then
 			flush()
 			pending = pending + 1
 		else
