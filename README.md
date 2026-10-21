@@ -192,7 +192,7 @@ Lines are joined with no space next to CJK characters and broken between them, w
 at the start of a line, no `「` at the end). Code blocks, front matter, headings, tables, HTML, link definitions,
 indented code, list items and quotes with blocks inside, quotes of different depth, and paragraphs with a hard line break
 (two trailing spaces or `\`) are not filled, and neither is a line that would turn into a list, heading or quote
-by starting a line. List items keep their marker and indentation (a task box stays together), quotes their marks;
+by starting a line. Code spans (`` `like this` ``) are not touched. List items keep their marker and indentation (a task box stays together), quotes their marks;
 the fill prefix is for plain paragraphs.
 
 ### Undo and redo
