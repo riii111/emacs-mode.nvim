@@ -1281,6 +1281,14 @@ cases["Shift moves select, and a move without Shift ends a selection that Shift 
 		{ "ab|cdef\nxyz", "<S-Right><S-Right><S-Right><C-w>", "ab|f\nxyz", "cde" },
 		{ "a\nb|\n\nc", "<C-S-Down><C-w>", "a\nb|\nc", "\n" },
 	})
+	-- moves to a place end a selection of Shift, but not one of the mark key
+	each({
+		{ "|abcdef\nghijkl", "<S-Right><M-g>g2<CR><BS>", "abcdef|ghijkl" },
+		{ "|abcdef\nghijkl", "<S-Right><M-g>c9<CR><BS>", "abcdef\n|hijkl" },
+		{ "|abcdef\nghijkl", "<S-Right><M-g><Tab>3<CR><BS>", "ab|def\nghijkl" },
+		{ "|abcdef\nghijkl", "<C-Space><M-g>g2<CR><BS>", "|ghijkl" },
+		{ "|abcdef\nghijkl", "<C-Space><M-g><Tab>3<CR><BS>", "|def\nghijkl" },
+	})
 	-- a selection from the mark key goes on through moves without Shift
 	state = state_after("<C-Space><Right><Right><Right>")
 	eq({ true, { 0, 2, 0, 5 } }, { state.selected, state.region }, "moves after C-SPC")
@@ -1563,6 +1571,9 @@ cases["M-q leaves alone what Markdown would read differently"] = function()
 	unchanged("|aaa\n- bbb")
 	unchanged("|> aaa\n>\n> bbb")
 	unchanged("- aaa\n\n|  bbb ccc")
+	unchanged("- |before\n    ```\n    some code\n    ```\n    after")
+	unchanged("10. |before\n    ~~~\n    some code\n    ~~~\n    after")
+	unchanged("- |before\n  ```\n  code\n  ```")
 	each({
 		{ "# Title\nte|xt\nmore", "<M-q>", "# Title\nte|xt more" },
 		{ "- |aaa bbb\n  ccc ddd", "<M-q>", "- |aaa bbb ccc ddd" },
@@ -1705,6 +1716,64 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 	eq({ 9, 9, 3 }, placed("<C-a><C-f><C-f><C-f><C-x><C-n><PageDown>"), "PageDown with a goal column")
 	eq({ 1, 1, 3 }, placed("<C-a><C-f><C-f><C-f><C-x><C-n><M-v>"), "M-v with a goal column")
 	vim.cmd.close()
+end
+
+cases["Up and Down keep the mappings they had on an open completion menu"] = function()
+	-- blink.cmp maps Down in each buffer itself, over the mapping this case sets
+	if package.loaded["blink.cmp"] then
+		return
+	end
+	local counted = 0
+	_G.emacs_test_down = function()
+		counted = counted + 1
+		return ""
+	end
+	vim.cmd([[
+		function! EmacsTestDown()
+			call v:lua.emacs_test_down()
+			return ""
+		endfunction
+	]])
+	local menu = "<Cmd>lua vim.fn.complete(1, { 'ab', 'ac' })<CR>"
+	local function run(prepare)
+		counted = 0
+		open("x\ny|")
+		prepare()
+		feed("e" .. menu .. "<Down><Esc>")
+		return counted
+	end
+	-- a mapping of the buffer with a Lua function, one with an expression, and one of all buffers
+	eq(
+		1,
+		run(function()
+			vim.keymap.set("i", "<Down>", _G.emacs_test_down, { buffer = true })
+		end),
+		"mapping of the buffer"
+	)
+	eq(
+		1,
+		run(function()
+			vim.keymap.set("i", "<Down>", "EmacsTestDown()", { buffer = true, expr = true })
+		end),
+		"expression of the buffer"
+	)
+	eq(
+		1,
+		run(function()
+			vim.keymap.set("i", "<Down>", _G.emacs_test_down)
+		end),
+		"global mapping"
+	)
+	pcall(vim.keymap.del, "i", "<Down>")
+	-- without a menu Down moves, and the mapping is back after the mode
+	counted = 0
+	open("x\ny|")
+	vim.keymap.set("i", "<Down>", _G.emacs_test_down, { buffer = true })
+	feed("e<Up><Esc>")
+	eq({ 0, 0 }, { counted, vim.api.nvim_win_get_cursor(0)[1] - 1 }, "Up without a menu")
+	feed("A<Down><Esc>")
+	eq(1, counted, "mapping after the mode")
+	_G.emacs_test_down = nil
 end
 
 cases["aliases give more keys to a command"] = function()

@@ -312,16 +312,22 @@ local function completion_open()
 	return false
 end
 
--- What a key does on an open completion menu: what the buffer had mapped to it, or the key itself.
+-- What a key does on an open completion menu: what was mapped to it, in the buffer or globally, or the key itself.
 local function pass_through(lhs, mapping)
+	local noremap = mapping and mapping.noremap == 1
 	if mapping and mapping.callback then
 		local ok, result = pcall(mapping.callback)
 		if mapping.expr == 1 and ok and type(result) == "string" and result ~= "" then
 			local typed = mapping.replace_keycodes == 1 and vim.keycode(result) or result
-			vim.api.nvim_feedkeys(typed, mapping.noremap == 1 and "n" or "m", false)
+			vim.api.nvim_feedkeys(typed, noremap and "n" or "m", false)
 		end
-	elseif mapping and mapping.expr ~= 1 and mapping.rhs and mapping.rhs ~= "" then
-		vim.api.nvim_feedkeys(vim.keycode(mapping.rhs), mapping.noremap == 1 and "n" or "m", false)
+	elseif mapping and mapping.rhs and mapping.rhs ~= "" then
+		local keys_to_feed = mapping.rhs
+		if mapping.expr == 1 then
+			local ok, result = pcall(vim.fn.eval, mapping.rhs)
+			keys_to_feed = ok and tostring(result) or ""
+		end
+		vim.api.nvim_feedkeys(vim.keycode(keys_to_feed), noremap and "n" or "m", false)
 	else
 		vim.api.nvim_feedkeys(vim.keycode(lhs), "n", false)
 	end
@@ -336,7 +342,7 @@ function M.completion_key(key, name, shifted)
 		return
 	end
 	if completion_open() then
-		pass_through(lhs, active.saved[lhs])
+		pass_through(lhs, active.passed[lhs])
 	else
 		vim.api.nvim_feedkeys(vim.keycode(rhs(name, shifted)), "ni", false)
 	end
@@ -370,13 +376,14 @@ local function key_table()
 end
 
 local function install(buf)
-	local saved = {}
+	local saved, passed = {}, {}
 	vim.api.nvim_buf_call(buf, function()
 		for lhs, entry in pairs(key_table()) do
 			-- a key given twice would save the mode's own mapping and put it back when the mode ends
 			if saved[lhs] == nil then
 				local mapping = vim.fn.maparg(lhs, "i", false, true)
 				saved[lhs] = mapping.buffer == 1 and mapping or false
+				passed[lhs] = next(mapping) ~= nil and mapping or nil
 				local options = { buffer = buf, nowait = true, silent = true, desc = DESC }
 				local keys_of_command = rhs(entry.name, entry.shifted)
 				if keys.completion[lhs] then
@@ -391,7 +398,7 @@ local function install(buf)
 			end
 		end
 	end)
-	return saved
+	return saved, passed
 end
 
 -- A block cursor like Normal mode and Emacs, set in 'guicursor' after what is there so the rest stays
@@ -407,7 +414,8 @@ end
 
 function activate(buf, win)
 	region.clear()
-	state.active = { buf = buf, win = win, saved = install(buf), cursor = block_cursor() }
+	local saved, passed = install(buf)
+	state.active = { buf = buf, win = win, saved = saved, passed = passed, cursor = block_cursor() }
 	vim.cmd.redrawstatus()
 end
 
@@ -905,6 +913,7 @@ commands = {
 	goto_line = {
 		reads_key = true,
 		keeps_region = true,
+		motion = true,
 		run = function(buf)
 			local number = ask_number("Goto line: ")
 			if number then
@@ -921,6 +930,7 @@ commands = {
 	goto_char = {
 		reads_key = true,
 		keeps_region = true,
+		motion = true,
 		run = function(buf)
 			local number = ask_number("Goto char: ")
 			if number then
@@ -931,6 +941,7 @@ commands = {
 	move_to_column = {
 		reads_key = true,
 		keeps_region = true,
+		motion = true,
 		run = function(buf, pos)
 			local number = ask_number("Move to column: ")
 			if number then
@@ -1031,7 +1042,7 @@ commands = {
 	scroll_right = scrolling_sideways("zh"),
 	recenter = cycling({ recenter("zz"), recenter("zt"), recenter("zb") }),
 	-- Emacs puts the cursor at the start of the line
-	move_to_window_line = cycling({ "M0", "H0", "L0" }),
+	move_to_window_line = vim.tbl_extend("force", cycling({ "M0", "H0", "L0" }), { motion = true }),
 	-- a second press right after drops the selection or brings it back
 	set_mark = {
 		keeps_region = true,

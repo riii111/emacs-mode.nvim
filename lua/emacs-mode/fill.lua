@@ -211,6 +211,9 @@ local function unit_at(lines, first, count)
 				return skipped(first, last, "table or HTML")
 			elseif not item and (lines[row]:find("^%s*=+%s*$") or lines[row]:find("^%s*%-+%s*$")) then
 				return skipped(first, last, "heading")
+			elseif item and (lines[row]:find("^%s*```") or lines[row]:find("^%s*~~~")) then
+				-- a fence indented by 4 or more is code in a text paragraph, but a block of the list item
+				return skipped(first, last, "block inside a list item")
 			end
 		end
 	end
