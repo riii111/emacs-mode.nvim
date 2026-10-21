@@ -212,7 +212,8 @@ The width and the prefix are variables of the buffer, `b:emacs_fill_column` and
 lines with no space next to CJK characters and breaks them between CJK
 characters, with no 。 or 」 at the start of a line and no 「 at the end. It
 leaves alone code blocks, front matter, headings, tables, HTML, link
-definitions, indented code, quotes of different depth or with blocks in them,
+definitions, indented code, list items and quotes with blocks in them,
+quotes of different depth,
 and paragraphs with a hard line break (two trailing spaces or `\`), and never
 puts a list marker, heading or quote mark at the start of a line.
 
@@ -332,6 +333,8 @@ Intentional differences ~
     - CTRL-X f asks for the width, the cursor column being the default.
       Filling adds no second space after a sentence.
     - The mark is not set where ALT-<, ALT-> and ALT-G g came from.
+    - ALT-G g, ALT-G c, ALT-G <Tab> and ALT-R end a selection that Shift
+      started, like other moves; Emacs keeps it.
     - ALT-Y alone asks with |vim.ui.select()|; an interface that answers
       later puts the kill only if the buffer did not change.
     - ALT-^ joins CJK text with no space. CTRL-X CTRL-T on the last line adds

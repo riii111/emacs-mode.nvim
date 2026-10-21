@@ -190,7 +190,7 @@ The mark stays until the mode ends: `C-x C-x`, `C-x C-u` and `C-x C-l` use it af
 Without `C-x f` the width is `'textwidth'`, or 70 when that is 0; `'textwidth'` itself is left alone.
 Lines are joined with no space next to CJK characters and broken between them, with kinsoku (no `。` or `」`
 at the start of a line, no `「` at the end). Code blocks, front matter, headings, tables, HTML, link definitions,
-indented code, quotes of different depth or with blocks inside, and paragraphs with a hard line break
+indented code, list items and quotes with blocks inside, quotes of different depth, and paragraphs with a hard line break
 (two trailing spaces or `\`) are not filled, and neither is a line that would turn into a list, heading or quote
 by starting a line. List items keep their marker and indentation (a task box stays together), quotes their marks;
 the fill prefix is for plain paragraphs.
@@ -316,6 +316,7 @@ lists them key by key with the Emacs source.
 - `C-x f` asks for the width with the cursor column as the default, and the width and the fill prefix belong
   to the buffer; `'textwidth'` is used when none was set. Filling never adds a second space after a sentence.
 - The mark does not move to where `M-<`, `M->` or `M-g g` came from, and there is no mark ring.
+- `M-g g`, `M-g c`, `M-g TAB` and `M-r` end a selection that Shift started, like the other moves; Emacs keeps it.
 - `M-y` without a yank before it uses `vim.ui.select()`, and an interface that answers later inserts the kill
   only if the buffer did not change.
 - `M-^` joins CJK text with no space, as filling does. `C-x C-t` on the last line adds no empty line.
