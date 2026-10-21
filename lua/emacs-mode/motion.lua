@@ -259,15 +259,86 @@ end
 
 -- the blanks around the cursor on its line, as { from, to }
 function M.blanks_around(buf, pos)
+	return M.space_around(buf, pos, false)
+end
+
+-- Spaces and tabs around pos, and the line breaks between them when newlines is true, as { from, to }.
+function M.space_around(buf, pos, newlines)
+	local from_row, from_col = pos[1], pos[2]
+	while true do
+		local text = line(buf, from_row)
+		while from_col > 0 and text:sub(from_col, from_col):find("[ \t]") do
+			from_col = from_col - 1
+		end
+		if not (newlines and from_col == 0 and from_row > 0) then
+			break
+		end
+		from_row = from_row - 1
+		from_col = #line(buf, from_row)
+	end
+	local last = last_row(buf)
+	local to_row, to_col = pos[1], pos[2]
+	while true do
+		local text = line(buf, to_row)
+		while to_col < #text and text:sub(to_col + 1, to_col + 1):find("[ \t]") do
+			to_col = to_col + 1
+		end
+		if not (newlines and to_col == #text and to_row < last) then
+			break
+		end
+		to_row, to_col = to_row + 1, 0
+	end
+	return { from_row, from_col }, { to_row, to_col }
+end
+
+local INDENT = { [" "] = true, ["\t"] = true, ["\u{3000}"] = true }
+
+-- the first character of the line that is not a blank, or the end of a line of blanks
+function M.back_to_indentation(buf, pos)
 	local text = line(buf, pos[1])
-	local from, to = pos[2], pos[2]
-	while from > 0 and text:sub(from, from):find("[ \t]") do
-		from = from - 1
+	local col = 0
+	while col < #text do
+		local char, stop = char_at(text, col)
+		if not INDENT[char] then
+			break
+		end
+		col = stop
 	end
-	while to < #text and text:sub(to + 1, to + 1):find("[ \t]") do
-		to = to + 1
+	return moved(pos, pos[1], col)
+end
+
+-- the width in cells of the text before the byte column col
+function M.display_column(buf, pos)
+	return vim.fn.strdisplaywidth(line(buf, pos[1]):sub(1, pos[2]))
+end
+
+-- Like Emacs' move-to-column: a column inside a character lands after it, one past the end of the line at its end.
+function M.column_position(buf, row, column)
+	local text = line(buf, row)
+	local width, col = 0, 0
+	while col < #text and width < column do
+		local stop = next_boundary(text, col)
+		width = width + vim.fn.strdisplaywidth(text:sub(col + 1, stop), width)
+		col = stop
 	end
-	return { pos[1], from }, { pos[1], to }
+	return { row, col }
+end
+
+-- Emacs' goto-char: the position after n - 1 characters, which are code points, line breaks included. A
+-- position inside a composed character lands before it.
+function M.char_position(buf, n)
+	local remaining = math.max(n - 1, 0)
+	local last = last_row(buf)
+	for row = 0, last do
+		local text = line(buf, row)
+		local count = vim.fn.strchars(text)
+		if remaining <= count then
+			local col = remaining == 0 and 0 or vim.str_byteindex(text, "utf-32", remaining)
+			return { row, vim.fn.byteidx(text, vim.fn.charidx(text, col)) }
+		end
+		remaining = remaining - count - 1
+	end
+	return { last, #line(buf, last) }
 end
 
 -- the gap after the next char at or after the cursor, over line breaks; nil when there is none
