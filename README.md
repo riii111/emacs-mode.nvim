@@ -47,7 +47,8 @@ require("emacs-mode").setup({
 `start_key = "e"` replaces the `e` motion in Normal mode of editable buffers; `e` in Visual and
 Operator-pending mode (`de`, `ye`) is unchanged, and buffers that are not for editing text (help, terminal,
 pickers, file explorers) keep the motion.
-To start the mode from a key of your own instead:
+To start the mode from a key of your own instead, still call `setup()` (with lazy.nvim, `opts = {}` does),
+since it sets up what ends the mode and counts the keys:
 
 ```lua
 vim.keymap.set("n", "<leader>e", function() require("emacs-mode").start() end)

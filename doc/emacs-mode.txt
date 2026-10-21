@@ -56,7 +56,8 @@ Calling setup() again ends the mode and replaces the earlier setup.
 
 start()                                                  *emacs-mode.start()*
     Starts the mode at the cursor, as |i| does. Returns false in a buffer that
-    is not for editing text or when the mode is on already.
+    is not for editing text or when the mode is on already. |emacs-mode-setup|
+    must have run, also when start() is mapped to a key of your own.
 
 stop()                                                    *emacs-mode.stop()*
     Ends the mode without leaving Insert mode.
