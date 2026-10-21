@@ -271,19 +271,19 @@ end
 
 -- the lines joined into one, with no space where a line break stands next to CJK text
 local function joined(bodies)
-	local text = ""
+	local parts, tail = {}, nil
 	for _, body in ipairs(bodies) do
 		body = trim(body)
 		if body ~= "" then
-			if text == "" then
-				text = body
-			else
-				local between = (cjk(last_char(text)) or cjk(first_char(body))) and "" or " "
-				text = text .. between .. body
+			local between = ""
+			if tail then
+				between = (cjk(tail) or cjk(first_char(body))) and "" or " "
 			end
+			table.insert(parts, between .. body)
+			tail = last_char((tail or "") .. between .. body)
 		end
 	end
-	return text
+	return table.concat(parts)
 end
 
 -- the index of the last backtick of the code span that starts at the backticks at index of chars, if it closes
