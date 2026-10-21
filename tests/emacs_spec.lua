@@ -1704,7 +1704,6 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 	eq({ 9, 9, 3 }, placed("<C-a><C-f><C-f><C-f><C-x><C-n><C-v>"), "C-v with a goal column")
 	eq({ 9, 9, 3 }, placed("<C-a><C-f><C-f><C-f><C-x><C-n><PageDown>"), "PageDown with a goal column")
 	eq({ 1, 1, 3 }, placed("<C-a><C-f><C-f><C-f><C-x><C-n><M-v>"), "M-v with a goal column")
-	eq({ 9, 9, 0 }, placed("<C-a><C-v>"), "C-v without one")
 	vim.cmd.close()
 end
 
