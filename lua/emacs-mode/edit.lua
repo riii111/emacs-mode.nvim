@@ -18,10 +18,23 @@ local function ordered(from, to)
 	return from, to
 end
 
+function M.ordered(from, to)
+	return ordered(from, to)
+end
+
 -- the text between two positions, in either order
 function M.text(from, to)
 	from, to = ordered(from, to)
 	return table.concat(vim.api.nvim_buf_get_text(0, from[1], from[2], to[1], to[2], {}), "\n")
+end
+
+-- Replaces the text between two positions in one change, which keeps marks at its ends where they were.
+-- Returns the position after the new text.
+function M.splice(from, to, text)
+	from, to = ordered(from, to)
+	local lines = vim.split(text, "\n", { plain = true })
+	vim.api.nvim_buf_set_text(0, from[1], from[2], to[1], to[2], lines)
+	return { from[1] + #lines - 1, (#lines == 1 and from[2] or 0) + #lines[#lines] }
 end
 
 -- Deletes the text between two positions (in either order), leaves the cursor there and returns the text.
@@ -74,6 +87,19 @@ end
 -- the kill C-y puts back
 function M.to_yank()
 	return kills[pointer]
+end
+
+-- the kills, the latest first
+function M.entries()
+	return vim.list_slice(kills)
+end
+
+-- Moves the yank pointer to the kill at index of entries() and returns that kill.
+function M.select(index)
+	if kills[index] then
+		pointer = index
+	end
+	return kills[index]
 end
 
 -- Moves the yank pointer to the next older kill, around to the latest after the oldest, and returns that kill.

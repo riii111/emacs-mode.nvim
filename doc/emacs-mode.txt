@@ -7,7 +7,10 @@ CONTENTS                                                  *emacs-mode-contents*
   2. Setup .................................. |emacs-mode-setup|
   3. Lua API ................................ |emacs-mode-api|
   4. Keys ................................... |emacs-mode-keys|
-  5. Behavior ............................... |emacs-mode-behavior|
+  5. Commands ............................... |emacs-mode-commands|
+  6. Status of Emacs' keys .................. |emacs-mode-status|
+  7. Terminals .............................. |emacs-mode-terminals|
+  8. Behavior ............................... |emacs-mode-behavior|
 
 ==============================================================================
 1. INTRODUCTION                                       *emacs-mode-introduction*
@@ -30,6 +33,7 @@ Requires Neovim 0.12 or later.
       start_key = "e",
       set_mark = { "<C-Space>", "<C-@>" },
       scroll_duration = 100,
+      aliases = {},
     })
 <
                                                        *emacs-mode-start_key*
@@ -49,6 +53,13 @@ scroll_duration ~
     Milliseconds of neoscroll's animation for CTRL-V, ALT-V and CTRL-L when
     neoscroll.nvim is loaded.
 
+                                                          *emacs-mode-aliases*
+aliases ~
+    More keys for a command, as `{ command = { "<key>", ... } }` with the names
+    of |emacs-mode-commands|. For a terminal that sends a key in a form that
+    cannot be told from another key (|emacs-mode-terminals|): >lua
+        aliases = { kill_whole_line = { "<F7>" }, redo = { "<F8>" } }
+<
 Calling setup() again ends the mode and replaces the earlier setup.
 
 ==============================================================================
@@ -71,50 +82,289 @@ teardown()                                            *emacs-mode.teardown()*
 ==============================================================================
 4. KEYS                                                       *emacs-mode-keys*
 
+`C-` is CTRL, `M-` is ALT (Meta), `S-` is Shift. Keys after a comma do the
+same as the first.
+
 Moves ~
-    CTRL-F / CTRL-B     next / previous character, across lines
-    CTRL-N / CTRL-P     next / previous screen line, as |gj| / |gk|
-    CTRL-A / CTRL-E     start / end of the line
-    ALT-F / ALT-B       after the end of the next word / start of the word
-    ALT-< / ALT->       start / end of the buffer
-    ALT-{ / ALT-}       previous / next paragraph separator
-    ALT-A / ALT-E       start / end of the sentence
-    CTRL-V / ALT-V      scroll down / up a screen
+    CTRL-F / CTRL-B, <Right> / <Left>
+                        next / previous character, across lines
+    CTRL-N / CTRL-P, <Down> / <Up>
+                        next / previous screen line, as |gj| / |gk|, keeping
+                        the column
+    CTRL-A / CTRL-E, <Home> / <End>
+                        start / end of the line
+    ALT-M               first character that is not a blank
+    ALT-F / ALT-B, CTRL-<Right> / CTRL-<Left>, ALT-<Right> / ALT-<Left>
+                        after the end of the next word / start of the word
+    ALT-< / ALT->, CTRL-<Home> / CTRL-<End>
+                        start / end of the buffer
+    ALT-{ / ALT-}, CTRL-<Up> / CTRL-<Down>
+                        previous / next paragraph separator
+    ALT-A / ALT-E      start / end of the sentence
+    ALT-G g, ALT-G ALT-G
+                        go to a line number that is asked for
+    ALT-G c             go to a character position: 1 is the start of the
+                        buffer, characters are code points and a line break
+                        is one
+    ALT-G <Tab>         go to a column of the line, counted in cells; inside
+                        a tab or a wide character, after it
+    CTRL-X CTRL-N       keep the column of CTRL-N, CTRL-P and the page
+                        scrolls (the goal column); pressed again where it
+                        is, release it
+
+Scrolling ~
+    CTRL-V / ALT-V, <PageDown> / <PageUp>
+                        scroll down / up a screen
     CTRL-L              current line to the middle, top and bottom, in turn
     ALT-R               cursor to the middle, top and bottom line, in turn
+    CTRL-X < / CTRL-X >, CTRL-<PageDown> / CTRL-<PageUp>
+                        scroll the text left / right by the width of the
+                        window less 2. Lines that wrap cannot scroll, so
+                        'wrap' is turned off in the window until the text
+                        is back at the left or the mode ends.
 
 Deleting and killing ~
-    CTRL-D / <Del>      delete the next character, joining lines at the end
-    <BS> / CTRL-H       delete the previous character
+    CTRL-D              delete the next character, with a selection too
+    <Del>               delete the selection, or the next character
+    <BS> / CTRL-H       delete the selection, or the previous character
     CTRL-K              kill to the end of the line, or the line break
+    CTRL-S-<BS>         kill the whole line with its line break
     CTRL-U              kill to the start of the line (Readline, not Emacs)
-    ALT-D / ALT-<BS>    kill to where ALT-F / ALT-B go
-    ALT-K               kill to the end of the sentence
+    ALT-D / ALT-<BS>, CTRL-<Del> / CTRL-<BS>
+                        kill to where ALT-F / ALT-B go
+    ALT-K, CTRL-X <BS>  kill to the end / back to the start of the sentence
     ALT-Z {char}        kill up to and with the next {char}
-    CTRL-Y              put back the kill at the yank pointer
-    ALT-Y               after CTRL-Y or ALT-Y, put the next older kill instead
 
-Region ~
-    CTRL-SPACE          set the mark (|emacs-mode-set_mark|)
-    CTRL-W              kill the region, or the word before the cursor
-    ALT-W               copy the region into the kill ring
-    CTRL-G              drop the region
-    ALT-H               mark the paragraph
+Mark and selection ~
+    CTRL-SPACE          set the mark and start a selection
+                        (|emacs-mode-set_mark|); again right after, drop it
+                        and bring it back
+    S-<Right> S-<Left> S-<Down> S-<Up> S-<Home> S-<End> S-<PageDown>
+    S-<PageUp>, CTRL-S-<Right> <Left> <Up> <Down> <Home> <End>,
+    ALT-S-<Right> <Left>
+                        move as without Shift and select from where the move
+                        started. A move without Shift ends such a selection
+    ALT-@               mark the next word; again, one word further
+    ALT-H               mark the paragraph; again, the next one too
+    CTRL-X h            select the buffer
+    CTRL-X CTRL-X       swap the cursor and the mark, bring the selection back
+    CTRL-G              drop the selection; the mark stays
+    CTRL-W, S-<Del>     kill the selection, or the word before the cursor
+    ALT-W, CTRL-<Insert>
+                        copy the selection into the kill ring
 
-Words ~
+Kill ring ~
+    CTRL-Y, S-<Insert>  put back the kill at the yank pointer, and set the
+                        mark at its start
+    ALT-Y               right after CTRL-Y, or after an ALT-Y that replaced,
+                        put the next older kill instead; otherwise, also
+                        after a kill chosen from the list, choose a kill
+                        with |vim.ui.select()| and put it
+    CTRL-ALT-W          make the next kill join the previous one
+
+Transposing, case, blanks and lines ~
+    CTRL-T              swap the characters around the cursor, or the last
+                        two at the end of a line; a line break is one
     ALT-T               swap the word at or before the cursor with the next
-    ALT-U / ALT-L / ALT-C   upcase / downcase / capitalize the rest of the word
-    ALT-\ / ALT-SPACE   delete the blanks around the cursor / leave one space
+    CTRL-X CTRL-T       swap the line with the one before it
+    ALT-U / ALT-L / ALT-C
+                        upcase / downcase / capitalize the rest of the word
+    CTRL-X CTRL-U / CTRL-X CTRL-L
+                        upcase / downcase from the mark to the cursor
+    ALT-\               delete the blanks around the cursor
+    ALT-SPACE           one space, pressed in a row none, then the blanks
+                        that were there
+    ALT-^               join the line to the one before it
+    CTRL-ALT-O          split the line, the rest in the column it had
+    CTRL-X CTRL-O       delete blank lines around the cursor but one
 
-Others ~
+Filling ~
+    ALT-Q               fill the paragraph at or after the cursor, or the
+                        paragraphs the selection touches
+    CTRL-X f            set the fill width of the buffer (default: the cursor
+                        column)
+    CTRL-X .            take the text before the cursor as the fill prefix;
+                        at the start of a line, remove it
+
+Undo, redo and search ~
+    CTRL-/ CTRL-_ CTRL-X u
+                        undo
+    CTRL-? CTRL-ALT-_   redo
     CTRL-S / CTRL-R     search forward / backward with |/| / |?|
-    CTRL-/ / CTRL-_     undo
 
-ALT-<, ALT->, ALT-{ and ALT-} are also mapped as <M-S-,>, <M-S-.>, <M-S-[>
-and <M-S-]>, the form they take with the kitty keyboard protocol.
+CTRL-X and ALT-G wait for the next key as long as it takes, without a
+timeout; <Esc> or CTRL-G gives up, and a key that means nothing there is
+dropped. Prompts use |input()| and |vim.ui.select()|; <Esc> cancels them.
+
+While the mode is on, CTRL-X is the Emacs prefix: Insert mode completion with
+|i_CTRL-X| is not available in it. The keys also take the place of Vim's
+CTRL-V (use CTRL-Q), CTRL-R, CTRL-W, CTRL-U, CTRL-K, CTRL-G, CTRL-T and others,
+and of other plugins' mappings on the same keys. <Up>, <Down>, <PageUp> and
+<PageDown> keep working on a completion menu while one is open.
+
+ALT-<, ALT->, ALT-{, ALT-}, ALT-@ and ALT-^ are also mapped as <M-S-,>,
+<M-S-.>, <M-S-[>, <M-S-]>, <M-S-2> and <M-S-6>, the form they take with the
+kitty keyboard protocol on a US keyboard.
+
+The fill width is 'textwidth', or 70 when that is 0, unless CTRL-X f set it.
+The width and the prefix are variables of the buffer, `b:emacs_fill_column` and
+`b:emacs_fill_prefix`; the goal column is `b:emacs_goal_column`. Filling joins
+lines with no space next to CJK characters and breaks them between CJK
+characters, with no 。 or 」 at the start of a line and no 「 at the end. It
+leaves alone code blocks, front matter, headings, tables, HTML, link
+definitions, indented code, list items and quotes with blocks in them,
+quotes of different depth,
+and paragraphs with a hard line break (two trailing spaces or `\`), and never
+puts a list marker, heading or quote mark at the start of a line. Code spans
+between backticks are not touched.
 
 ==============================================================================
-5. BEHAVIOR                                               *emacs-mode-behavior*
+5. COMMANDS                                               *emacs-mode-commands*
+
+The names to use in |emacs-mode-aliases|, with the keys they have:
+
+    append_next_kill            CTRL-ALT-W
+    back_to_indentation         ALT-M
+    backward_char               CTRL-B <Left> (S- selects)
+    backward_kill_sentence      CTRL-X <BS>
+    backward_kill_word          ALT-<BS> CTRL-<BS>
+    backward_paragraph          ALT-{ CTRL-<Up>
+    backward_sentence           ALT-A
+    backward_word               ALT-B CTRL-<Left> ALT-<Left>
+    buffer_end                  ALT-> CTRL-<End>
+    buffer_start                ALT-< CTRL-<Home>
+    capitalize_word             ALT-C
+    copy_region                 ALT-W CTRL-<Insert>
+    cycle_spacing               ALT-SPACE
+    delete_backward_char        <BS> CTRL-H
+    delete_blank_lines          CTRL-X CTRL-O
+    delete_char                 CTRL-D
+    delete_forward_char         <Del>
+    delete_horizontal_space     ALT-\
+    delete_indentation          ALT-^
+    downcase_region             CTRL-X CTRL-L
+    downcase_word               ALT-L
+    exchange_point_and_mark     CTRL-X CTRL-X
+    fill_paragraph              ALT-Q
+    forward_char                CTRL-F <Right>
+    forward_paragraph           ALT-} CTRL-<Down>
+    forward_sentence            ALT-E
+    forward_word                ALT-F CTRL-<Right> ALT-<Right>
+    goto_char                   ALT-G c
+    goto_line                   ALT-G g, ALT-G ALT-G
+    keyboard_quit               CTRL-G
+    kill_line_end               CTRL-K
+    kill_line_start             CTRL-U
+    kill_region                 CTRL-W S-<Del>
+    kill_sentence               ALT-K
+    kill_whole_line             CTRL-S-<BS>
+    kill_word                   ALT-D CTRL-<Del>
+    line_end                    CTRL-E <End>
+    line_start                  CTRL-A <Home>
+    mark_paragraph              ALT-H
+    mark_whole_buffer           CTRL-X h
+    mark_word                   ALT-@
+    move_to_column              ALT-G <Tab>
+    move_to_window_line         ALT-R
+    next_line                   CTRL-N <Down>
+    previous_line               CTRL-P <Up>
+    recenter                    CTRL-L
+    redo                        CTRL-? CTRL-ALT-_
+    scroll_down                 CTRL-V <PageDown>
+    scroll_left                 CTRL-X < CTRL-<PageDown>
+    scroll_right                CTRL-X > CTRL-<PageUp>
+    scroll_up                   ALT-V <PageUp>
+    search_backward             CTRL-R
+    search_forward              CTRL-S
+    set_fill_column             CTRL-X f
+    set_fill_prefix             CTRL-X .
+    set_goal_column             CTRL-X CTRL-N
+    set_mark                    CTRL-SPACE (|emacs-mode-set_mark|)
+    split_line                  CTRL-ALT-O
+    transpose_chars             CTRL-T
+    transpose_lines             CTRL-X CTRL-T
+    transpose_words             ALT-T
+    undo                        CTRL-/ CTRL-_ CTRL-X u
+    upcase_region               CTRL-X CTRL-U
+    upcase_word                 ALT-U
+    yank                        CTRL-Y S-<Insert>
+    yank_pop                    ALT-Y
+    zap_to_char                 ALT-Z
+
+`ctl_x` and `goto_prefix` are CTRL-X and ALT-G, which wait for a second key.
+
+==============================================================================
+6. STATUS OF EMACS' KEYS                                    *emacs-mode-status*
+
+Supported ~
+    The standard keys and aliases of GNU Emacs 30 in: moving and positions,
+    scrolling, deleting and killing, mark and selection, the kill ring,
+    transposing, case, blanks and lines, filling, and undo and redo (the keys
+    of |emacs-mode-keys|). Key by key with the Emacs source:
+    docs/emacs-30-key-audit.md in the repository.
+
+Delegated to Neovim ~
+    The mode implements none of these operations and gives their Emacs keys
+    no new meaning: CTRL-S and CTRL-R run Vim's search, CTRL-O, CTRL-J and the
+    other keys of Insert mode keep their Insert mode meaning, and CTRL-X
+    followed by a key the mode does not use is dropped.
+    Files and buffers (C-x C-f, C-x b, C-x C-s); windows and frames (C-x 2,
+    C-x 3, C-x o, C-M-v); search and replace (C-s and C-r use |/| and |?|;
+    C-M-s, C-M-r, M-%); editing by syntax (C-M-f, C-M-b, C-M-k, C-M-t,
+    C-M-@, C-M-h); indentation by language (M-i, C-M-\, C-x TAB); macros and
+    registers; special newlines (C-o is |i_CTRL-O|, C-j); commands, help and
+    completion (M-x, C-h, M-/); the undo history.
+
+Unsupported ~
+    These Emacs operations are left out on purpose. A key of Emacs that the
+    mode uses for something else is under the intentional differences.
+    Rectangles; numeric arguments and repetition (C-u, M-0 to M-9, M--,
+    C-x z); the mark ring and position history (C-u C-SPC, C-x C-SPC); pages
+    (C-x [, C-x ], C-x C-p); selective undo; Auto Fill mode; input methods.
+
+Intentional differences ~
+    - CTRL-U kills to the start of the line; it is no numeric argument.
+      CTRL-W kills the word before the cursor when no selection is on. CTRL-O
+      stays the Insert mode one.
+    - No register and no clipboard is read or written. The mode's Insert mode
+      keys and completion settings leave plain Insert mode as it was.
+    - Typing does not replace the selection, and ends it.
+    - The goal column is released by CTRL-X CTRL-N where it is. A page scroll
+      with a goal column set is not animated by neoscroll.
+    - CTRL-X f asks for the width, the cursor column being the default.
+      Filling adds no second space after a sentence.
+    - The mark is not set where ALT-<, ALT-> and ALT-G g came from.
+    - ALT-G g, ALT-G c, ALT-G <Tab> and ALT-R end a selection that Shift
+      started, like other moves; Emacs keeps it.
+    - ALT-Y alone asks with |vim.ui.select()|; an interface that answers
+      later puts the kill only if the buffer did not change.
+    - ALT-^ joins CJK text with no space. CTRL-X CTRL-T on the last line adds
+      no empty line.
+    - Scrolling sideways turns 'wrap' off for a while; the cursor moves into
+      view. Emacs asks to confirm C-x < and C-x C-n; the mode does not.
+    - Case conversion is |toupper()| and |tolower()|: ß becomes ẞ, not SS.
+
+==============================================================================
+7. TERMINALS                                             *emacs-mode-terminals*
+
+A terminal that cannot tell two keys apart sends them as one, and one input
+gets one action here.
+
+    C-?             DEL, as for <BS>: the key is <BS>. With the kitty keyboard
+                    protocol C-? is redo, also as <C-S-/>.
+    C-S-<BS>        the same as <BS>; with the protocol it kills the line.
+    C-<BS>          some terminals send CTRL-H, which deletes a character.
+    C-M-_           <Esc> and CTRL-_, the same as C-M-/: redo, when it
+                    arrives as <C-M-_>.
+    C-SPC           CTRL-@; both set the mark.
+
+Which of these a terminal really sends was not checked on a physical keyboard,
+and Neovim's reading of the sequences was checked only with synthetic input.
+Give a key that works to the command with |emacs-mode-aliases|.
+|vim.on_key()| shows what arrives.
+
+==============================================================================
+8. BEHAVIOR                                               *emacs-mode-behavior*
 
 - A character is what |l| and |h| move over, composing characters and emoji
   sequences included. A word is a run of 'iskeyword' characters; Japanese
@@ -125,8 +375,9 @@ and <M-S-]>, the form they take with the kitty keyboard protocol.
 - The kill ring keeps 60 kills for the session, shared by all buffers. Kills
   in a row join in the order of the text.
 - Each command is one undo step, apart from the text typed around it.
-- The region is highlighted with |hl-Visual|. Moves stretch it; typing and
-  the other commands end it. Typing does not replace it.
+- The mark and the selection are separate. The selection is highlighted with
+  |hl-Visual|; moves stretch it, typing and the other commands end it, and
+  typing does not replace it. The mark stays until the mode ends.
 - A completion menu is closed without accepting an item before a command.
 - |i_CTRL-O| runs a Normal mode command and comes back to the mode. Leaving
   the buffer or the window ends the mode.

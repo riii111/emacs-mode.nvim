@@ -1,0 +1,171 @@
+-- The keys of the mode and the commands they run, by name.
+local M = {}
+
+-- Keys that run a command by themselves. Several keys can run one command: Emacs' own aliases, the keys of the
+-- kitty keyboard protocol for what terminals send otherwise, and the keypad.
+M.single = {
+	["<C-f>"] = "forward_char",
+	["<Right>"] = "forward_char",
+	["<kRight>"] = "forward_char",
+	["<C-b>"] = "backward_char",
+	["<Left>"] = "backward_char",
+	["<kLeft>"] = "backward_char",
+	["<C-n>"] = "next_line",
+	["<Down>"] = "next_line",
+	["<kDown>"] = "next_line",
+	["<C-p>"] = "previous_line",
+	["<Up>"] = "previous_line",
+	["<kUp>"] = "previous_line",
+	["<C-a>"] = "line_start",
+	["<Home>"] = "line_start",
+	["<kHome>"] = "line_start",
+	["<C-e>"] = "line_end",
+	["<End>"] = "line_end",
+	["<kEnd>"] = "line_end",
+	["<M-f>"] = "forward_word",
+	["<C-Right>"] = "forward_word",
+	["<M-Right>"] = "forward_word",
+	["<M-b>"] = "backward_word",
+	["<C-Left>"] = "backward_word",
+	["<M-Left>"] = "backward_word",
+	["<M-lt>"] = "buffer_start",
+	["<C-Home>"] = "buffer_start",
+	["<kOrigin>"] = "buffer_start",
+	["<M->>"] = "buffer_end",
+	["<C-End>"] = "buffer_end",
+	-- with the kitty keyboard protocol, Option+Shift+, arrives as <M-S-,>, not <M-lt>
+	["<M-S-,>"] = "buffer_start",
+	["<M-S-.>"] = "buffer_end",
+	["<M-{>"] = "backward_paragraph",
+	["<M-S-[>"] = "backward_paragraph",
+	["<C-Up>"] = "backward_paragraph",
+	["<M-}>"] = "forward_paragraph",
+	["<M-S-]>"] = "forward_paragraph",
+	["<C-Down>"] = "forward_paragraph",
+	["<M-a>"] = "backward_sentence",
+	["<M-e>"] = "forward_sentence",
+	["<M-m>"] = "back_to_indentation",
+	["<C-v>"] = "scroll_down",
+	["<PageDown>"] = "scroll_down",
+	["<kPageDown>"] = "scroll_down",
+	["<M-v>"] = "scroll_up",
+	["<PageUp>"] = "scroll_up",
+	["<kPageUp>"] = "scroll_up",
+	["<C-PageDown>"] = "scroll_left",
+	["<C-PageUp>"] = "scroll_right",
+	["<C-l>"] = "recenter",
+	["<M-r>"] = "move_to_window_line",
+	["<C-d>"] = "delete_char",
+	["<Del>"] = "delete_forward_char",
+	["<kDel>"] = "delete_forward_char",
+	["<BS>"] = "delete_backward_char",
+	["<C-h>"] = "delete_backward_char",
+	["<C-u>"] = "kill_line_start",
+	["<C-k>"] = "kill_line_end",
+	["<M-d>"] = "kill_word",
+	["<C-Del>"] = "kill_word",
+	["<M-BS>"] = "backward_kill_word",
+	["<C-BS>"] = "backward_kill_word",
+	["<M-k>"] = "kill_sentence",
+	["<M-z>"] = "zap_to_char",
+	-- a terminal without the kitty keyboard protocol sends these as Backspace
+	["<C-S-BS>"] = "kill_whole_line",
+	["<C-y>"] = "yank",
+	["<S-Insert>"] = "yank",
+	["<M-y>"] = "yank_pop",
+	["<C-M-w>"] = "append_next_kill",
+	["<C-w>"] = "kill_region",
+	["<S-Del>"] = "kill_region",
+	["<M-w>"] = "copy_region",
+	["<C-Insert>"] = "copy_region",
+	["<C-g>"] = "keyboard_quit",
+	["<M-h>"] = "mark_paragraph",
+	["<M-@>"] = "mark_word",
+	["<M-S-2>"] = "mark_word",
+	["<C-t>"] = "transpose_chars",
+	["<M-t>"] = "transpose_words",
+	["<M-u>"] = "upcase_word",
+	["<M-l>"] = "downcase_word",
+	["<M-c>"] = "capitalize_word",
+	["<M-Bslash>"] = "delete_horizontal_space",
+	["<M-Space>"] = "cycle_spacing",
+	["<M-^>"] = "delete_indentation",
+	["<M-S-6>"] = "delete_indentation",
+	["<C-M-o>"] = "split_line",
+	["<M-q>"] = "fill_paragraph",
+	["<C-s>"] = "search_forward",
+	["<C-r>"] = "search_backward",
+	-- terminals send CTRL-/ as CTRL-_
+	["<C-/>"] = "undo",
+	["<C-_>"] = "undo",
+	-- C-? is DEL, which a terminal sends for Backspace and Neovim reads as <BS>; the protocol sends C-? as C-S-/
+	["<C-?>"] = "redo",
+	["<C-S-/>"] = "redo",
+	["<C-M-_>"] = "redo",
+	["<C-M-S-->"] = "redo",
+}
+
+-- Keys that start a selection when they move: the shifted form of a move.
+M.shifted = {
+	["<S-Right>"] = "forward_char",
+	["<S-Left>"] = "backward_char",
+	["<S-Down>"] = "next_line",
+	["<S-Up>"] = "previous_line",
+	["<S-Home>"] = "line_start",
+	["<S-End>"] = "line_end",
+	["<C-S-Right>"] = "forward_word",
+	["<M-S-Right>"] = "forward_word",
+	["<C-S-Left>"] = "backward_word",
+	["<M-S-Left>"] = "backward_word",
+	["<C-S-Up>"] = "backward_paragraph",
+	["<C-S-Down>"] = "forward_paragraph",
+	["<C-S-Home>"] = "buffer_start",
+	["<C-S-End>"] = "buffer_end",
+	["<S-PageDown>"] = "scroll_down",
+	["<S-PageUp>"] = "scroll_up",
+}
+
+-- Keys that wait for a second key: the key to the prefix, the label shown while it waits and the commands of the
+-- second keys. The keys are in the form they have when read.
+local function prefix(name, label, commands)
+	local keys = {}
+	for key, command in pairs(commands) do
+		keys[vim.keycode(key)] = command
+	end
+	return { name = name, label = label, keys = keys }
+end
+
+M.prefixes = {
+	["<C-x>"] = prefix("ctl_x", "C-x", {
+		["<C-x>"] = "exchange_point_and_mark",
+		["h"] = "mark_whole_buffer",
+		["<C-n>"] = "set_goal_column",
+		["<lt>"] = "scroll_left",
+		[">"] = "scroll_right",
+		["<BS>"] = "backward_kill_sentence",
+		["<C-h>"] = "backward_kill_sentence",
+		["<C-t>"] = "transpose_lines",
+		["<C-u>"] = "upcase_region",
+		["<C-l>"] = "downcase_region",
+		["<C-o>"] = "delete_blank_lines",
+		["u"] = "undo",
+		["f"] = "set_fill_column",
+		["."] = "set_fill_prefix",
+	}),
+	["<M-g>"] = prefix("goto_prefix", "M-g", {
+		["g"] = "goto_line",
+		["<M-g>"] = "goto_line",
+		["c"] = "goto_char",
+		["<Tab>"] = "move_to_column",
+	}),
+}
+
+-- Keys that go on working on a completion menu when one is open, as in plain Insert mode.
+M.completion = {
+	["<Up>"] = true,
+	["<Down>"] = true,
+	["<PageUp>"] = true,
+	["<PageDown>"] = true,
+}
+
+return M
