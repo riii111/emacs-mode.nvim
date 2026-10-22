@@ -7,6 +7,33 @@ local M = {}
 
 local cjk, first_char, last_char = chars.cjk, chars.first, chars.last
 
+-- defined below, with the helpers it uses
+local fill_unit
+
+-- Fills the paragraphs that overlap the rows from..to. Returns the replacements { first, last, lines, count, place }
+-- from the last to the first, and the note of the first paragraph left alone, if any.
+function M.fill(lines, from, to, options)
+	local edits, note = {}, nil
+	for _, unit in ipairs(M.units(lines)) do
+		if unit.last >= from and unit.first <= to then
+			if unit.kind == "skip" then
+				note = note or unit.note
+			else
+				local old = vim.list_slice(lines, unit.first + 1, unit.last + 1)
+				local new, count, place = fill_unit(old, unit, options)
+				if not vim.deep_equal(old, new) then
+					table.insert(
+						edits,
+						1,
+						{ first = unit.first, last = unit.last, lines = new, count = count, place = place }
+					)
+				end
+			end
+		end
+	end
+	return edits, note
+end
+
 local function blank(text)
 	return text:find("^[ \t]*$") ~= nil
 end
@@ -492,7 +519,7 @@ end
 -- Fills the lines of one unit. Returns the new lines, and two functions that carry a position over: count(row, col)
 -- tells how many characters that are not blanks come before a position of the old lines, and place(count) gives
 -- the position after that many in the new lines.
-local function fill_unit(lines, unit, options)
+function fill_unit(lines, unit, options)
 	local split, lead, prefix = parts(lines, unit, options)
 	local bodies = {}
 	for _, pair in ipairs(split) do
@@ -551,30 +578,6 @@ local function fill_unit(lines, unit, options)
 	end
 
 	return out, count, place
-end
-
--- Fills the paragraphs that overlap the rows from..to. Returns the replacements { first, last, lines, count, place }
--- from the last to the first, and the note of the first paragraph left alone, if any.
-function M.fill(lines, from, to, options)
-	local edits, note = {}, nil
-	for _, unit in ipairs(M.units(lines)) do
-		if unit.last >= from and unit.first <= to then
-			if unit.kind == "skip" then
-				note = note or unit.note
-			else
-				local old = vim.list_slice(lines, unit.first + 1, unit.last + 1)
-				local new, count, place = fill_unit(old, unit, options)
-				if not vim.deep_equal(old, new) then
-					table.insert(
-						edits,
-						1,
-						{ first = unit.first, last = unit.last, lines = new, count = count, place = place }
-					)
-				end
-			end
-		end
-	end
-	return edits, note
 end
 
 return M
