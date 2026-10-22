@@ -304,7 +304,6 @@ local function completion_open()
 	return false
 end
 
--- What a key does on an open completion menu: what was mapped to it, in the buffer or globally, or the key itself.
 local function pass_through(lhs, mapping)
 	local noremap = mapping and mapping.noremap == 1
 	if mapping and mapping.callback then
@@ -393,7 +392,6 @@ local function install(buf)
 	return saved, passed
 end
 
--- A block cursor like Normal mode and Emacs, set in 'guicursor' after what is there so the rest stays
 local function block_cursor()
 	local guicursor = vim.o.guicursor
 	if guicursor == "" then
@@ -526,7 +524,6 @@ local function before(a, b)
 	return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2])
 end
 
--- whether a kill goes on from the one before: it came right after it, with the cursor where it left it, or after C-M-w
 local function kill_continues(buf, pos)
 	if append_next and append_next.key_sequence == command_key_sequence - 1 then
 		return edit.killed() ~= nil
@@ -543,7 +540,6 @@ local function remember_kill(buf)
 	last_kill = { buf = buf, tick = vim.b.changedtick, pos = cursor(), key_sequence = key_sequence }
 end
 
--- Kills the text between the cursor and the position target returns; a kill in a row adds backward kills in front.
 -- target can return true or false as well to tell whether the kill goes in front, which Emacs decides the other way
 -- round for a region.
 local function killing(target)
@@ -621,7 +617,6 @@ local function screen_line(direction)
 	}
 end
 
--- Pressed again right after, a command goes on to the next of its steps.
 local function cycling(steps)
 	local command = { keeps_region = true }
 	local function step_with(step)
@@ -1117,7 +1112,6 @@ commands = {
 			edit.set_cursor(mark)
 		end,
 	},
-	-- the characters on both sides of the cursor, a line break being one; at the end of a line the two before it
 	transpose_chars = {
 		run = function(buf, pos)
 			local middle = pos

@@ -120,7 +120,6 @@ local function blank(buf, row)
 	return line(buf, row):find("^[ \t]*$") ~= nil
 end
 
--- As in Emacs, both stop at the blank line that separates paragraphs.
 function M.forward_paragraph(buf, pos)
 	local last = last_row(buf)
 	local row = pos[1]

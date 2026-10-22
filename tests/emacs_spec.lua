@@ -170,7 +170,6 @@ cases["the cursor is a block while the mode is on"] = function()
 	eq(guicursor .. ",i-ci:block", T.guicursor, "'guicursor' in the mode")
 	eq(guicursor, vim.o.guicursor, "'guicursor' after the mode")
 
-	-- the mode leaves a 'guicursor' that was changed while it was on
 	feed("e<Cmd>set guicursor=a:hor20<CR><Esc>")
 	eq("a:hor20", vim.o.guicursor)
 	vim.o.guicursor = guicursor
@@ -1176,7 +1175,6 @@ cases["kills join with C-M-w, also with keys of two strokes"] = function()
 	eq({ " cc", before }, { kill_ago(1), kill_ago(2) }, "without C-M-w the kills are separate")
 	check("One. Two. Th|ree", "<C-k><C-b><C-M-w><C-x><BS>", "One. Two. |h", "Tree")
 	check("aa| bb cc", "<M-d><C-M-w><C-S-BS>", "|", "aa bb cc")
-	-- a region with the cursor before the mark goes in front, as in Emacs, and one with the cursor after it behind
 	check("aa| bb cc dd", "<M-d><C-Space><C-e><C-x><C-x><C-M-w><C-w>", "aa|", " cc dd bb")
 	check("aa bb cc| dd", "<M-d><C-b><C-b><C-b><C-Space><C-f><C-f><C-f><C-M-w><C-w>", "aa bb|", " dd cc")
 	check("aa| bb cc", "<M-d><C-M-w><C-f><M-d>", "aa |", "cc")
