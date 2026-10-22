@@ -1,8 +1,7 @@
--- The keys of the mode and the commands they run, by name.
 local M = {}
 
--- Keys that run a command by themselves. Several keys can run one command: Emacs' own aliases, the keys of the
--- kitty keyboard protocol for what terminals send otherwise, and the keypad.
+-- Several keys can run one command: Emacs' own aliases, the keys of the kitty keyboard protocol for what terminals
+-- send otherwise, and the keypad.
 M.single = {
 	["<C-f>"] = "forward_char",
 	["<Right>"] = "forward_char",
@@ -105,7 +104,6 @@ M.single = {
 	["<C-M-S-->"] = "redo",
 }
 
--- Keys that start a selection when they move: the shifted form of a move.
 M.shifted = {
 	["<S-Right>"] = "forward_char",
 	["<S-Left>"] = "backward_char",
@@ -125,8 +123,7 @@ M.shifted = {
 	["<S-PageUp>"] = "scroll_up",
 }
 
--- Keys that wait for a second key: the key to the prefix, the label shown while it waits and the commands of the
--- second keys. The keys are in the form they have when read.
+-- The second keys are stored in the form they have when read.
 local function prefix(name, label, commands)
 	local keys = {}
 	for key, command in pairs(commands) do
@@ -160,7 +157,7 @@ M.prefixes = {
 	}),
 }
 
--- Keys that go on working on a completion menu when one is open, as in plain Insert mode.
+-- Keys that keep their plain Insert mode behavior while a completion menu is open.
 M.completion = {
 	["<Up>"] = true,
 	["<Down>"] = true,

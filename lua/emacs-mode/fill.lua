@@ -1,13 +1,13 @@
 -- Paragraph filling in the way of Emacs' fill-paragraph, for text that mixes Latin and CJK characters. Lines that
 -- Markdown would read differently once joined (code, headings, tables, HTML, hard line breaks, ...) are left alone.
--- Rows are 0-based as in motion.lua; the lines are the lines of the buffer.
+-- Rows are 0-based as in motion.lua.
 local chars = require("emacs-mode.chars")
 
 local M = {}
 
 local cjk, first_char, last_char = chars.cjk, chars.first, chars.last
 
--- defined below, with the helpers it uses
+-- declared first so that M.fill leads the file
 local fill_unit
 
 -- Fills the paragraphs that overlap the rows from..to. Returns the replacements { first, last, lines, count, place }
@@ -86,8 +86,6 @@ local function starts_block(token)
 		or token:find("^<[%a/!?]")
 		or token:find("^%$%$")
 end
-
--- Markdown structure, by line
 
 -- A fence at any indentation: one indented by 4 or more is code in a text paragraph, but a block of a list item.
 local function fence(text)
@@ -196,7 +194,7 @@ local function quoted(text)
 	return lead, text:sub(#lead + 1), #(text:match("^[%s>]*>(%s*)") or "") >= 5, depth
 end
 
--- The paragraph or block that starts at lines[first] (1-based, as are first and last here).
+-- first and last are 1-based here.
 local function unit_at(lines, first, count)
 	local text = lines[first]
 	local item = list_item(text)
@@ -294,10 +292,8 @@ function M.units(lines)
 	return units
 end
 
--- Filling one paragraph
-
--- the lines joined into one, with no space where a line break stands next to CJK text
-local function joined(bodies)
+-- No space goes where a line break stands next to CJK text.
+local function join_bodies(bodies)
 	local parts, tail = {}, nil
 	for _, body in ipairs(bodies) do
 		body = trim(body)
@@ -313,7 +309,7 @@ local function joined(bodies)
 	return table.concat(parts)
 end
 
--- the index of the last backtick of the code span that starts at the backticks at index of chars, if it closes
+-- The index of the closing backtick of the code span opened at index, nil when it never closes.
 local function code_span_end(all, index)
 	local length = 0
 	while all[index + length] == "`" do
@@ -472,9 +468,8 @@ local function layout(atoms, lead, prefix, limit)
 	return out
 end
 
--- How the lines of a unit split into a prefix and a body, as { start, body } with the byte column where the body
--- starts, and the prefixes of the first and the other lines when filled.
-local function parts(lines, unit, options)
+-- Returns { body_column, body } per line, then the prefixes of the first and of the other lines when filled.
+local function split_prefixes(lines, unit, options)
 	local split, lead, prefix = {}, "", ""
 	local first = lines[1]
 	if unit.kind == "list" then
@@ -520,7 +515,7 @@ end
 -- tells how many characters that are not blanks come before a position of the old lines, and place(count) gives
 -- the position after that many in the new lines.
 function fill_unit(lines, unit, options)
-	local split, lead, prefix = parts(lines, unit, options)
+	local split, lead, prefix = split_prefixes(lines, unit, options)
 	local bodies = {}
 	for _, pair in ipairs(split) do
 		table.insert(bodies, pair[2])
@@ -533,7 +528,7 @@ function fill_unit(lines, unit, options)
 			task, bodies[1] = box, rest
 		end
 	end
-	local atoms = atoms_of(joined(bodies))
+	local atoms = atoms_of(join_bodies(bodies))
 	if task then
 		if atoms[1] then
 			atoms[1].gap = " "

@@ -7,22 +7,20 @@ local emacs = require("emacs-mode")
 local edit = require("emacs-mode.edit")
 local region = require("emacs-mode.region")
 
--- the tests start the mode with `e`
 local OPTS = { start_key = "e" }
 
 local T = { snaps = {} }
 _G.emacs_test = T
 
--- every key the mode maps
-local keys = {}
+local mode_keys = {}
 do
 	local table_of_keys = require("emacs-mode.keys")
 	for _, group in ipairs({ table_of_keys.single, table_of_keys.shifted, table_of_keys.prefixes }) do
 		for lhs in pairs(group) do
-			table.insert(keys, lhs)
+			table.insert(mode_keys, lhs)
 		end
 	end
-	vim.list_extend(keys, { "<C-Space>", "<C-@>" })
+	vim.list_extend(mode_keys, { "<C-Space>", "<C-@>" })
 end
 
 -- "abc|def\nxyz": the lines, with the cursor where "|" is
@@ -162,7 +160,6 @@ cases["e starts the mode at the cursor and Esc or CTRL-C ends it"] = function()
 	eq({ "n", false }, { T.snaps.after.mode, T.snaps.after.active }, "after CTRL-C")
 	eq({}, buffer_maps(0), "mappings left after CTRL-C")
 
-	-- e typed in the mode is text
 	check("|ab", "e", "e|ab")
 end
 
@@ -173,7 +170,6 @@ cases["the cursor is a block while the mode is on"] = function()
 	eq(guicursor .. ",i-ci:block", T.guicursor, "'guicursor' in the mode")
 	eq(guicursor, vim.o.guicursor, "'guicursor' after the mode")
 
-	-- a value set while the mode was on stays
 	feed("e<Cmd>set guicursor=a:hor20<CR><Esc>")
 	eq("a:hor20", vim.o.guicursor)
 	vim.o.guicursor = guicursor
@@ -214,7 +210,6 @@ cases["plain Insert mode and the e motion are unchanged"] = function()
 	feed("ve<Esc>")
 	eq(3, vim.fn.col("'>"), "e in Visual mode")
 
-	-- buffers that are not for editing text keep the motion
 	open("|foo bar")
 	vim.bo.buftype = "nofile"
 	feed("e")
@@ -335,13 +330,11 @@ cases["M-y goes back through older kills"] = function()
 		check("x|", "<C-y>" .. string.rep("<M-y>", count), expected)
 	end
 
-	-- only right after C-y or M-y
 	kills("a", "b")
 	check("x|", "<M-y><Esc>", "x|")
 	check("x|", "<C-y>Z<M-y><Esc>", "xbZ|")
 	check("x|", "<C-y><C-b><C-f><M-y><Esc>", "xb|")
 
-	-- C-y puts back the kill M-y went to, until the next kill
 	check("x|", "<C-y><M-y> <C-y>", "xa a|")
 	check("x|y", "<C-k><C-y>", "xy|", "y")
 
@@ -361,7 +354,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 	check("ab|c\ndef", "<C-Space><C-n><C-w>", "ab|f", "c\nde")
 	check("ab|cd", "<C-@><C-e><C-w>", "ab|", "cd")
 	check("ab|cd", "<C-Space><C-e><M-w><C-y>", "abcdcd|", "cd")
-	-- a C-w right after another joins the kill in text order
 	check("foo ab|cd", "<C-Space><C-b><C-b><C-w><C-w>", "|cd", "foo ab")
 
 	session("ab|cdef", "<C-Space><C-f><C-f>" .. snap("on") .. "<C-g>" .. snap("quit"))
@@ -378,7 +370,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 
 	-- the mark set right after typing stays: the change came before it
 	check("|", "abc<C-Space>" .. idle .. "<C-b><C-b>" .. idle .. "<C-w>", "a|", "bc")
-	-- a key given twice is mapped once and comes back unmapped
 	local ok, err = pcall(function()
 		emacs.setup({ start_key = "e", set_mark = { "<C-Space>", "<C-Space>", "<C-g>" } })
 		check("ab|cd", "<C-Space><C-e><C-w>", "ab|", "cd")
@@ -391,13 +382,11 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 	check("ab|cd", "<C-Space><C-w>", "ab|cd", "kept")
 	-- C-y ends the region, so C-w kills the word
 	check("ab|cd", "<C-Space><C-y><C-b><C-w>", "|tcd", "abkep")
-	-- without a region C-w kills the word before the cursor
 	check("foo bar|", "<C-w>", "foo |", "bar")
 
 	check("a\n\nb|1\nb2\n\nc", "<M-h><C-w>", "a\n|\nc", "\nb1\nb2\n")
 	check("a\n\nb|1\nb2", "<M-h><C-w>", "a\n|", "\nb1\nb2")
 
-	-- other keys can set the mark
 	local ok, err = pcall(function()
 		emacs.setup({ start_key = "e", set_mark = { "<C-]>" } })
 		check("ab|cd", "<C-]><C-e><C-w>", "ab|", "cd")
@@ -440,7 +429,6 @@ cases["M-z kills up to and with the typed character"] = function()
 	check("a|b\nc,d", "<M-z>,", "a|d", "b\nc,")
 	check("|あいう、え", "<M-z>、", "|え", "あいう、")
 	check("a|,b,c", "<M-z>,", "a|b,c", ",")
-	-- it joins kills right before and after it
 	check("a|b c,d", "<M-d><M-z>,", "a|d", "b c,")
 	check("a|b,c,d", "<M-z>,<M-z>,", "a|d", "b,c,")
 	check("a|b,cd", "<M-z>,<M-d>", "a|", "b,cd")
@@ -476,7 +464,6 @@ cases["sentences end at 。！？ and at . ! ? before a blank"] = function()
 	check("|Yes.\u{3000}No.", "<M-e>", "Yes.|\u{3000}No.")
 	check("|Really?! Yes", "<M-e>", "Really?!| Yes")
 
-	-- a line break inside a paragraph is like a blank, and a paragraph ends its last sentence
 	check("first line\nsecond. Th|ird", "<M-a><M-a>", "|first line\nsecond. Third")
 	check("|no end here\nstill\n\nnext.", "<M-e>", "no end here\nstill|\n\nnext.")
 	check("one. two\n\n|three", "<M-a>", "one. |two\n\nthree")
@@ -511,7 +498,6 @@ cases["any other key ends a row of kills"] = function()
 	check("a|bc\nde", "<C-k><C-y><C-k>", "abc|de", "\n")
 	check("a|bc\nde", "<C-k><BS><C-k>", "|de", "\n")
 	check("a|bc\nde", "<C-k><C-/><C-k>", "a|\nde", "bc")
-	-- a kill that kills nothing neither clears nor breaks the row
 	check("a|b", "<C-k><C-k><C-u>", "|", "ab")
 	-- a row does not continue in another buffer or after the mode ended
 	session("a|bc", "<C-k>")
@@ -590,7 +576,6 @@ cases["undo goes on in the mode and redo in Normal mode"] = function()
 	feed("<C-r>")
 	eq("efx", text())
 
-	-- text typed before and after a move to another line are separate steps that undo cleanly
 	open("x|\ny")
 	feed("e<C-e>A<C-n><C-a>B<C-p><C-e>C<Esc>")
 	eq("xAC\nBy", text())
@@ -707,7 +692,6 @@ cases["C-n and C-p move by screen lines and keep the column"] = function()
 		table.insert(down, at("d" .. i))
 		table.insert(up, at("u" .. i))
 	end
-	-- C-p comes back over the same screen rows
 	for i = 1, 7 do
 		table.insert(rows, T.snaps["d" .. i].screen_row - T.snaps["u" .. (8 - i)].screen_row)
 	end
@@ -733,7 +717,6 @@ cases["C-n and C-p move by screen lines and keep the column"] = function()
 	eq(options, { vim.wo.wrap, vim.wo.linebreak, vim.wo.breakindent, vim.o.virtualedit, vim.wo.virtualedit })
 	vim.cmd.close()
 
-	-- the last column of a line stays reachable, and typing between moves sets a new column
 	check("abc|def\nxy\nabcdef", "<C-e><C-n><C-n>", "abcdef\nxy\nabcdef|")
 	check("abcdef\nx|y\nabcdef", "<C-n>ZZ<C-p><C-p>", "abc|def\nxy\naZZbcdef")
 	check("abc\n|", "<C-n><C-p><C-p>", "|abc\n")
@@ -868,7 +851,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 	)
 	vim.cmd.close()
 
-	-- the cursor after the end of the line stays there
 	check("ab\nabc|", "<C-l>", "ab\nabc|")
 end
 
@@ -944,7 +926,7 @@ cases["mappings of the buffer come back as they were"] = function()
 	vim.keymap.set("i", "<C-y>", "GLOBAL")
 	local function maps()
 		local found = {}
-		for _, lhs in ipairs(keys) do
+		for _, lhs in ipairs(mode_keys) do
 			found[lhs] = vim.fn.maparg(lhs, "i", false, true)
 		end
 		return found
@@ -959,7 +941,7 @@ cases["mappings of the buffer come back as they were"] = function()
 	local after = maps()
 	eq("OTHER", after["<C-e>"].rhs, "a mapping set while the mode was on")
 	before["<C-e>"], after["<C-e>"] = nil, nil
-	for _, lhs in ipairs(keys) do
+	for _, lhs in ipairs(mode_keys) do
 		eq(before[lhs], after[lhs], "mapping of " .. lhs)
 	end
 	feed("A<C-k><Esc>")
@@ -1002,7 +984,6 @@ local function each(rows)
 	end
 end
 
--- the kill that is n kills back in the ring
 local function kill_ago(n)
 	return edit.entries()[n + 1]
 end
@@ -1013,7 +994,7 @@ local function kills(...)
 	end
 end
 
--- runs fn with global options set, as new buffers take them, and puts them back
+-- Options are global because new buffers take them.
 local function with_options(options, fn)
 	local saved = {}
 	for name, value in pairs(options) do
@@ -1027,7 +1008,6 @@ local function with_options(options, fn)
 	assert(ok, err)
 end
 
--- tabs of 8 columns that are not turned into spaces
 local TABS = { tabstop = 8, expandtab = false }
 
 cases["alias keys do what their Emacs keys do"] = function()
@@ -1195,10 +1175,8 @@ cases["kills join with C-M-w, also with keys of two strokes"] = function()
 	eq({ " cc", before }, { kill_ago(1), kill_ago(2) }, "without C-M-w the kills are separate")
 	check("One. Two. Th|ree", "<C-k><C-b><C-M-w><C-x><BS>", "One. Two. |h", "Tree")
 	check("aa| bb cc", "<M-d><C-M-w><C-S-BS>", "|", "aa bb cc")
-	-- a region with the cursor before the mark goes in front, as in Emacs, and one with the cursor after it behind
 	check("aa| bb cc dd", "<M-d><C-Space><C-e><C-x><C-x><C-M-w><C-w>", "aa|", " cc dd bb")
 	check("aa bb cc| dd", "<M-d><C-b><C-b><C-b><C-Space><C-f><C-f><C-f><C-M-w><C-w>", "aa bb|", " dd cc")
-	-- only the command right after C-M-w joins
 	check("aa| bb cc", "<M-d><C-M-w><C-f><M-d>", "aa |", "cc")
 	edit.store("old", "replace")
 	check("x|y", "<C-M-w><C-k>", "x|", "oldy")
@@ -1226,7 +1204,6 @@ cases["the mark stays when the selection is dropped, and is separate from the se
 	eq({ true, { 0, 2 }, { 0, 2, 0, 4 } }, { T.snaps.on.selected, T.snaps.on.mark, T.snaps.on.region })
 	eq({ false, { 0, 2 }, nil }, { T.snaps.quit.selected, T.snaps.quit.mark, T.snaps.quit.region }, "after C-g")
 	eq({ false, nil }, { T.snaps.moved.selected, T.snaps.moved.region }, "a move after C-g")
-	-- C-x C-x uses the mark and brings the selection back
 	session("ab|cdef", "<C-Space><C-f><C-f><C-g><C-f><C-x><C-x>" .. snap("swapped"))
 	eq({ "ab|cdef", true, { 0, 5 }, { 0, 2, 0, 5 } }, {
 		T.snaps.swapped.text,
@@ -1236,11 +1213,9 @@ cases["the mark stays when the selection is dropped, and is separate from the se
 	})
 	check("ab|cdef", "<C-Space><C-f><C-f><C-x><C-x><C-w>", "ab|ef", "cd")
 	check("ab|cdef", "<C-x><C-x>X", "abX|cdef")
-	-- C-SPC again drops the selection, and again brings it back
 	session("ab|cd", "<C-Space><C-f><C-Space><C-Space>" .. snap("off") .. "<C-Space>" .. snap("on"))
 	eq({ false, nil, { 0, 3 } }, { T.snaps.off.selected, T.snaps.off.region, T.snaps.off.mark })
 	eq({ true, { 0, 3, 0, 3 } }, { T.snaps.on.selected, T.snaps.on.region })
-	-- C-SPC at the mark brings the selection back
 	session("ab|cd", "<C-Space><C-g>X<C-b><C-Space>" .. snap("again"))
 	eq(true, T.snaps.again.selected)
 end
@@ -1281,7 +1256,6 @@ cases["Shift moves select, and a move without Shift ends a selection that Shift 
 		{ "ab|cdef\nxyz", "<S-Right><S-Right><S-Right><C-w>", "ab|f\nxyz", "cde" },
 		{ "a\nb|\n\nc", "<C-S-Down><C-w>", "a\nb|\nc", "\n" },
 	})
-	-- moves to a place end a selection of Shift, but not one of the mark key
 	each({
 		{ "|abcdef\nghijkl", "<S-Right><M-g>g2<CR><BS>", "abcdef|ghijkl" },
 		{ "|abcdef\nghijkl", "<S-Right><M-g>c9<CR><BS>", "abcdef\n|hijkl" },
@@ -1289,13 +1263,10 @@ cases["Shift moves select, and a move without Shift ends a selection that Shift 
 		{ "|abcdef\nghijkl", "<C-Space><M-g>g2<CR><BS>", "|ghijkl" },
 		{ "|abcdef\nghijkl", "<C-Space><M-g><Tab>3<CR><BS>", "|def\nghijkl" },
 	})
-	-- a selection from the mark key goes on through moves without Shift
 	state = state_after("<C-Space><Right><Right><Right>")
 	eq({ true, { 0, 2, 0, 5 } }, { state.selected, state.region }, "moves after C-SPC")
-	-- Shift after the mark key starts a selection from the cursor
 	state = state_after("<C-Space><Right><Right><S-Right>")
 	eq({ true, { 0, 4, 0, 5 }, { 0, 4 } }, { state.selected, state.region, state.mark }, "S-Right after C-SPC")
-	-- C-x C-x keeps a selection of Shift as it is
 	state = state_after("<S-Right><S-Right><C-x><C-x><Right>")
 	eq(false, state.selected, "Right after C-x C-x of a Shift selection")
 	state = state_after("<S-PageDown>", "|a\nb\nc")
@@ -1314,7 +1285,6 @@ cases["M-@ marks the next word, and again one word further"] = function()
 		{ "a|b c", "<C-Space><M-@><C-w>", "a| c", "b" },
 		{ "|日本語 abc", "<M-@><C-w>", "| abc", "日本語" },
 	})
-	-- no word to mark: an empty selection kills nothing
 	edit.store("kept", "replace")
 	check("x|", "<M-@><C-w>", "x|", "kept")
 end
@@ -1335,7 +1305,6 @@ cases["C-y sets the mark at the start of what it puts, without a selection"] = f
 	eq({ "xabc|y", false, { 0, 1 }, nil }, { state.text, state.selected, state.mark, state.region })
 	check("x|y", "<C-y><C-x><C-x>X", "xX|abcy")
 	check("x|y", "<C-y><C-x><C-u>", "xABC|y")
-	-- M-y puts another kill in its place and leaves the mark where it was
 	edit.store("def", "replace")
 	edit.store("abc", "replace")
 	check("x|y", "<C-y><M-y><C-x><C-u>", "xDEF|y")
@@ -1349,16 +1318,12 @@ cases["M-y alone asks which kill to put"] = function()
 		{ "x|", "<M-y>3<CR>", "xa|" },
 		{ "x|", "<M-y><Esc>", "x|" },
 		{ "x|", "<M-y>q", "x|" },
-		-- the chosen kill is the one C-y puts back
 		{ "x|", "<M-y>2<CR><C-y>", "xbb|" },
-		-- right after it, M-y asks again
 		{ "x|", "<M-y>2<CR><M-y>3<CR>", "xba|" },
-		-- the mark is at its start
 		{ "x|", "<M-y>2<CR><C-x><C-u>", "xB|" },
 	})
 	kills("l1\nl2", "s")
 	check("x|y", "<M-y>2<CR>", "xl1\nl2|y")
-	-- one undo step
 	session("x|", "<M-y>2<CR><C-/>" .. snap("undone"))
 	eq("x", (T.snaps.undone.text:gsub("|", "")))
 
@@ -1391,7 +1356,6 @@ cases["C-t swaps the characters around the cursor"] = function()
 		{ "e\u{301}|x", "<C-t>", "xe\u{301}|" },
 		{ "a|👨‍👩‍👧b", "<C-t>", "👨‍👩‍👧a|b" },
 		{ "a🇯🇵|b", "<C-t>", "ab🇯🇵|" },
-		-- a line break is a character
 		{ "ab\n|cd", "<C-t>", "abc\n|d" },
 		{ "ab|\n", "<C-t>", "ba|\n" },
 	})
@@ -1417,11 +1381,9 @@ cases["C-x C-u and C-x C-l change the case of the region"] = function()
 		{ "|ab\ncd", "<C-Space><C-n><C-e><C-x><C-u>", "AB\nCD|" },
 		-- the upper case of a letter can be shorter in bytes
 		{ "|aı", "<C-Space><C-e><C-x><C-u>", "AI|" },
-		-- the mark of a dropped selection counts, as in Emacs
 		{ "ab|cd", "<C-Space><C-e><C-g><C-x><C-u>", "abCD|" },
 		{ "ab|cd", "<S-End><C-x><C-u>", "abCD|" },
 		{ "ab|cd", "<C-Space><C-x><C-u>", "ab|cd" },
-		-- no mark, no change
 		{ "ab|cd", "<C-x><C-u>", "ab|cd" },
 		{ "ab|cd", "<C-x><C-l>", "ab|cd" },
 	})
@@ -1443,7 +1405,6 @@ cases["M-SPC goes from one space to none and back to the blanks it found"] = fun
 		{ "a|b", "<M-Space><M-Space><M-Space>", "a|b" },
 		{ "a\u{3000}|b", "<M-Space>", "a\u{3000} |b" },
 		{ "a |\nb", "<M-Space><M-Space><M-Space>", "a |\nb" },
-		-- a key between ends the row
 		{ "a  |b", "<M-Space>X<M-Space>", "a X |b" },
 	})
 end
@@ -1472,7 +1433,6 @@ cases["C-M-o splits the line and keeps the rest in its column"] = function()
 		{ "foo|", "<C-M-o>", "foo|\n   " },
 		{ "日本|語", "<C-M-o>", "日本|\n    語" },
 	})
-	-- the blanks are tabs and spaces, or spaces only with 'expandtab'
 	with_options(TABS, function()
 		check("\tab|cd", "<C-M-o>", "\tab|\n\t  cd")
 	end)
@@ -1494,7 +1454,6 @@ cases["C-x C-o removes blank lines"] = function()
 	})
 end
 
--- the keys that set the fill width to width
 local function width_keys(width)
 	return ("<C-x>f<C-u>%d<CR>"):format(width)
 end
@@ -1505,23 +1464,18 @@ cases["M-q fills the paragraph at the width C-x f set"] = function()
 		{ "|aaa bbb ccc ddd eee fff ggg hhh", width_keys(20) .. "<M-q>", "|aaa bbb ccc ddd eee\nfff ggg hhh" },
 		{ "|aaa\nbbb\nccc", "<M-q>", "|aaa bbb ccc" },
 		{ "aaa\nbb|b\n\nccc\nddd", "<M-q>", "aaa bb|b\n\nccc\nddd" },
-		-- when the cursor is between paragraphs, the one after it
 		{ "a\n|\nb\nc", "<M-q>", "a\n|\nb c" },
 		{ "aaaa  bbbb cccc|", width_keys(10) .. "<M-q>", "aaaa bbbb\ncccc|" },
-		-- indented paragraphs keep their indentation, and a second line sets that of the others
 		{ "  |aaa bbb ccc ddd", width_keys(12) .. "<M-q>", "  |aaa bbb\n  ccc ddd" },
 		{ "|aaa bbb ccc ddd\n    eee", width_keys(12) .. "<M-q>", "|aaa bbb ccc\n    ddd eee" },
-		-- the width of the cursor column, without typing a number
 		{ "aaa b|bb ccc", "<C-x>f<CR><M-q>", "aaa\nb|bb\nccc" },
 	})
 	eq(textwidth, vim.go.textwidth, "'textwidth'")
-	-- the width belongs to the buffer
 	open("|x")
 	feed("e" .. width_keys(33) .. "<Esc>")
 	eq(33, vim.b.emacs_fill_column)
 	open("|x")
 	eq(nil, vim.b.emacs_fill_column)
-	-- 'textwidth' is the width when none was set
 	vim.go.textwidth = 12
 	check("|aaa bbb ccc ddd", "<M-q>", "|aaa bbb ccc\nddd")
 	vim.go.textwidth = textwidth
@@ -1540,7 +1494,6 @@ cases["M-q breaks Japanese and English text where it is allowed"] = function()
 		{ "|日本語\n日本語", "<M-q>", "|日本語日本語" },
 		{ "|日本語 and English words", width_keys(14) .. "<M-q>", "|日本語 and\nEnglish words" },
 		{ "|「あいう」えお", width_keys(6) .. "<M-q>", "|「あい\nう」え\nお" },
-		-- no line starts with what Markdown would read as a block
 		{ "|aaa bbb - ccc", width_keys(8) .. "<M-q>", "|aaa\nbbb -\nccc" },
 		{ "|see item 1. next", width_keys(10) .. "<M-q>", "|see\nitem 1.\nnext" },
 	})
@@ -1604,7 +1557,6 @@ cases["M-q fills the selection and uses the fill prefix"] = function()
 		{ "|aaa\nbbb\n\nccc\nddd", "<C-Space><C-n><C-n><C-n><M-q>", "aaa bbb\n\n|ccc\nddd" },
 		{ "; ; |aaa bbb ccc ddd eee", "<C-x>." .. width_keys(12) .. "<M-q>", "; ; |aaa bbb\n; ; ccc ddd\n; ; eee" },
 	})
-	-- C-x . at the start of a line takes the prefix away
 	open("; ; |aaa bbb ccc")
 	feed("e<C-x>.<C-a><C-x>.<Esc>")
 	eq(nil, vim.b.emacs_fill_prefix)
@@ -1643,12 +1595,9 @@ cases["the goal column holds the column of C-n and C-p until it is released"] = 
 		{ spec, "<C-n><C-e><C-n>", "abcdef\nxy\nab|cdef" },
 		{ spec, "<C-x><C-n><C-n><C-e><C-n><C-p><C-p>", "abc|def\nxy\nabcdef" },
 		{ spec, "<C-x><C-n><Down><Down>", "abcdef\nxy\nabc|def" },
-		-- released where the cursor is in the goal column
 		{ spec, "<C-x><C-n><C-n><C-e><C-n><C-x><C-n><C-p><C-e><C-p>", "ab|cdef\nxy\nabcdef" },
-		-- elsewhere it is set again
 		{ spec, "<C-x><C-n><C-n><C-e><C-x><C-n><C-n>", "abcdef\nxy\nab|cdef" },
 	})
-	-- the goal column is counted in cells and belongs to the buffer
 	with_options(TABS, function()
 		open("|\tab\nabcdefghijklm")
 		feed("e<C-f><C-x><C-n><Esc>")
@@ -1688,12 +1637,10 @@ cases["C-x < and C-x > scroll the text sideways, also where lines wrap"] = funct
 	eq({ 36, false }, { state.leftcol, state.wrap }, "C-PageDown")
 	state = after(false, "<C-x><lt><C-x><lt><C-PageUp>")
 	eq({ 18, false }, { state.leftcol, state.wrap }, "C-PageUp")
-	-- Esc during the scroll puts wrapping back
 	vim.wo.wrap = true
 	open("|" .. long)
 	feed("e<C-x><lt><Esc>")
 	eq({ true, 0 }, { vim.wo.wrap, vim.fn.winsaveview().leftcol }, "after Esc")
-	-- the selection goes on through it
 	state = after(true, "<C-Space><C-x><lt>")
 	eq(true, state.selected)
 	vim.cmd.close()
@@ -1719,7 +1666,6 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 	eq(at("<C-v>"), at("<C-a><S-PageDown>"))
 	session(spec, "<S-PageDown>" .. snap("end"))
 	eq(true, T.snaps["end"].selected, "S-PageDown selects")
-	-- the goal column is for them too
 	local function placed(input)
 		local snapshot = at(input)
 		return { snapshot[1], snapshot[2], T.snaps["end"].pos[2] }
@@ -1754,7 +1700,6 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 		feed("e" .. menu .. "<Down><Esc>")
 		return counted
 	end
-	-- a mapping of the buffer with a Lua function, one with an expression, and one of all buffers
 	eq(
 		1,
 		run(function()
@@ -1797,7 +1742,6 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 		"expression with <SID>"
 	)
 	vim.fn.delete(script)
-	-- without a menu Down moves, and the mapping is back after the mode
 	counted = 0
 	open("x\ny|")
 	vim.keymap.set("i", "<Down>", _G.emacs_test_down, { buffer = true })
@@ -1853,7 +1797,6 @@ local function completion()
 	local show = "<Cmd>lua emacs_test_show()<CR>" .. menu()
 	edit.store("KILL", "replace")
 
-	-- the mode's keys do not select or accept items
 	check("alpha alphabet\nal|\nnext", show .. "<C-n>", "alpha alphabet\nal\nne|xt")
 	eq(false, cmp.is_menu_visible(), "menu after C-n")
 	check("alpha alphabet\nal|\nnext", show .. "<C-p>", "al|pha alphabet\nal\nnext")
@@ -1864,7 +1807,6 @@ local function completion()
 	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. snap("preview") .. "<C-a>", "alpha alphabet\n|al")
 	assert(T.snaps.preview.text ~= "alpha alphabet\nal|", "selecting did not preview an item")
 	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. "<C-k>", "alpha alphabet\nal|", "KILL")
-	-- the arrow keys go on choosing items of the menu
 	session(
 		"alpha alphabet\nal|",
 		show .. "<Down>" .. previewed .. snap("down") .. "<Up>" .. "<Cmd>lua vim.wait(200)<CR>" .. snap("up")
@@ -1872,7 +1814,6 @@ local function completion()
 	assert(T.snaps.up.text ~= T.snaps.down.text, "Up did not choose another item than Down: " .. T.snaps.up.text)
 	check("alpha alphabet\nal|", show .. "<S-Right>", "alpha alphabet\nal|")
 
-	-- plain Insert mode completion is unchanged
 	open("alpha alphabet\nal|")
 	local accepted = "<Cmd>lua vim.wait(1000, function() return not require('blink.cmp').is_menu_visible() end)<CR>"
 	feed("A" .. show .. "<C-n>" .. previewed .. "<C-y>" .. accepted .. "<Esc>")
