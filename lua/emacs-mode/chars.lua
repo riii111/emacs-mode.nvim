@@ -2,13 +2,30 @@
 -- sequences as one.
 local M = {}
 
+-- Vim counts characters from the start of the string, so each boundary is looked up in a short window: the window
+-- must hold the whole character and the code point after it, which can still join it.
+local function char_length(text, col)
+	local byte, next_byte = text:byte(col + 1, col + 2)
+	if byte < 0x80 and (not next_byte or next_byte < 0x80) then
+		return 1
+	end
+	local size = 16
+	while true do
+		local window = text:sub(col + 1, col + size)
+		local stop = vim.fn.byteidx(window, 1)
+		if col + size >= #text then
+			return stop > 0 and stop or #window
+		elseif stop > 0 and stop + 4 <= #window then
+			return stop
+		end
+		size = size * 2
+	end
+end
+
 function M.split(text)
 	local result, col = {}, 0
 	while col < #text do
-		local stop = vim.fn.byteidx(text, vim.fn.charidx(text, col) + 1)
-		if stop <= col then
-			stop = #text
-		end
+		local stop = col + char_length(text, col)
 		table.insert(result, text:sub(col + 1, stop))
 		col = stop
 	end
@@ -24,12 +41,18 @@ function M.set(text)
 end
 
 function M.first(text)
-	return M.split(text)[1]
+	if text ~= "" then
+		return text:sub(1, char_length(text, 0))
+	end
 end
 
 function M.last(text)
-	local all = M.split(text)
-	return all[#all]
+	local byte, previous = text:byte(-1), text:byte(-2)
+	if byte and byte < 0x80 and (not previous or previous < 0x80) then
+		return text:sub(-1)
+	elseif byte then
+		return text:sub(vim.fn.byteidx(text, vim.fn.charidx(text, #text - 1)) + 1)
+	end
 end
 
 local CJK_RANGES = {
