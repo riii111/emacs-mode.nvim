@@ -27,23 +27,18 @@ local config = defaults
 
 -- pending: `e` was pressed and Insert mode is about to start; active: the mode is on in this buffer and window
 local state = { pending = nil, active = nil }
--- counts the keys typed while the mode is on; a kill continues the previous one only when no other key came between
+-- counts the keys typed while the mode is on; a command continues the previous one only when no other key came between
 local key_sequence = 0
 local last_kill
--- set by C-M-w: the next kill joins the previous one
 local append_next
 -- the column C-n and C-p aim at, kept while they move the cursor one after another
 local vertical_goal
--- where C-y or M-y put the text last; M-y replaces it when it comes right after them
 local last_yank
--- the step C-l or M-r took last; pressed again right after, they go on to the next step
 local last_cycle
--- the command that ran last and the key it ended with; some commands go on from themselves when pressed again
-local previous
--- the count of keys when the running command was typed, before it read keys of its own
-local started = 0
--- the blanks M-SPC started from, which it brings back after its other steps
-local spacing
+local last_command
+-- key_sequence when the running command was typed, before it read keys of its own
+local command_key_sequence = 0
+local spacing_cycle
 
 local function cursor()
 	local pos = vim.api.nvim_win_get_cursor(0)
@@ -146,7 +141,6 @@ end
 local function execute(buf, name, command, shifted)
 	local pos = cursor()
 	if shifted then
-		-- a selection of shifted moves goes on; otherwise one starts here
 		if not (region.is_active(buf) and region.kind() == "shift") then
 			region.set_mark(buf, pos, true, "shift")
 		end
@@ -160,7 +154,7 @@ local function execute(buf, name, command, shifted)
 		vertical_goal = nil
 	end
 	command.run(buf, pos)
-	previous = { name = name, key_sequence = key_sequence }
+	last_command = { name = name, key_sequence = key_sequence }
 	-- moves stretch the selection; anything else ends it, and the mark stays
 	if command.keeps_region or shifted then
 		region.draw(buf, cursor(), true)
@@ -175,7 +169,7 @@ function M.run(name, shifted)
 	if not (active and active.buf == vim.api.nvim_get_current_buf()) then
 		return
 	end
-	started = key_sequence
+	command_key_sequence = key_sequence
 	local command = commands[name]
 	-- a command that reads keys leaves the last <C-g>u of its mapping to this function, once it has read them
 	local reads_keys = command.reads_key
@@ -213,8 +207,8 @@ function M.stop()
 	vertical_goal = nil
 	last_yank = nil
 	last_cycle = nil
-	previous = nil
-	spacing = nil
+	last_command = nil
+	spacing_cycle = nil
 	region.clear()
 	restore(active)
 	vim.cmd.redrawstatus()
@@ -229,8 +223,6 @@ function M.teardown()
 		vim.keymap.del("n", start_key)
 	end
 end
-
--- Entering and leaving
 
 function editable(buf)
 	return vim.bo[buf].buftype == "" and vim.bo[buf].modifiable
@@ -349,7 +341,6 @@ function M.completion_key(key, name, shifted)
 	end
 end
 
--- every key of the mode with the command it runs, as lhs = { name, shifted }
 local function key_table()
 	local found = {}
 	for lhs, name in pairs(keys.single) do
@@ -453,8 +444,6 @@ function restore(active)
 	end)
 end
 
--- Commands
-
 function close_completion()
 	if package.loaded["blink.cmp"] then
 		-- blink.cmp's own cancel() is deferred and would undo the preview after this command has edited the text
@@ -470,8 +459,9 @@ function close_completion()
 	end
 end
 
--- Asks for a line of text with Vim's `input()`, and returns nil when it is given up with Esc.
 local CANCELLED = "\1"
+
+-- Returns nil when given up with Esc.
 local function ask(prompt, default)
 	local pos = cursor()
 	local ok, answer = pcall(vim.fn.input, { prompt = prompt, default = default or "", cancelreturn = CANCELLED })
@@ -511,7 +501,6 @@ local function moving(target)
 	}
 end
 
--- deletes the text between the cursor and target, or the selection when honors_region and there is one
 local function deleting(from, to, honors_region)
 	return {
 		run = function(buf, pos)
@@ -539,14 +528,14 @@ end
 
 -- whether a kill goes on from the one before: it came right after it, with the cursor where it left it, or after C-M-w
 local function kill_continues(buf, pos)
-	if append_next and append_next.key_sequence == started - 1 then
+	if append_next and append_next.key_sequence == command_key_sequence - 1 then
 		return edit.killed() ~= nil
 	end
 	return last_kill ~= nil
 		and last_kill.buf == buf
 		and last_kill.tick == vim.b.changedtick
 		and vim.deep_equal(last_kill.pos, pos)
-		and last_kill.key_sequence == started - 1
+		and last_kill.key_sequence == command_key_sequence - 1
 end
 
 local function remember_kill(buf)
@@ -632,7 +621,7 @@ local function screen_line(direction)
 	}
 end
 
--- Like Emacs' recenter-positions: the middle of the window first, then the top and the bottom.
+-- Pressed again right after, a command goes on to the next of its steps.
 local function cycling(steps)
 	local command = { keeps_region = true }
 	local function step_with(step)
@@ -645,7 +634,7 @@ local function cycling(steps)
 	function command.run()
 		local cycle = last_cycle
 		local step = 1
-		if cycle and cycle.command == command and cycle.key_sequence == started - 1 then
+		if cycle and cycle.command == command and cycle.key_sequence == command_key_sequence - 1 then
 			step = cycle.step % #steps + 1
 		end
 		step_with(steps[step])
@@ -654,7 +643,6 @@ local function cycling(steps)
 	return command
 end
 
--- Changes the next word with convert(text) and moves after it, as M-u, M-l and M-c do.
 local function converting(convert)
 	return {
 		run = function(buf, pos)
@@ -666,8 +654,7 @@ local function converting(convert)
 	}
 end
 
--- Changes the text between the mark and the cursor with convert(text), as C-x C-u and C-x C-l do. The mark is
--- used also when the selection was dropped, as in Emacs.
+-- As in Emacs, the mark counts also when the selection was dropped.
 local function converting_region(convert)
 	return {
 		run = function(buf, pos)
@@ -692,7 +679,6 @@ local function converting_region(convert)
 	}
 end
 
--- runs the neoscroll function when neoscroll is loaded, else the Normal mode keys
 local function smooth(keys_to_press, animate)
 	return function()
 		if package.loaded["neoscroll"] then
@@ -755,7 +741,6 @@ local function scrolling_sideways(keys_to_press)
 	}
 end
 
--- the lines of the buffer from the first to the last row that a command fills
 local function fill_options(buf)
 	local width = vim.b[buf].emacs_fill_column
 	if not width then
@@ -818,7 +803,6 @@ local function fill_paragraphs(buf, pos)
 	end
 end
 
--- shows the text of a kill on one line, for the list M-y offers
 local function preview(text)
 	local shown = text:gsub("\n", "↵")
 	if vim.fn.strchars(shown) > 80 then
@@ -827,7 +811,7 @@ local function preview(text)
 	return shown
 end
 
--- runs fn in the window win if it still shows buf as it was, with the changedtick it had
+-- The prompt of vim.ui.select() may be answered later, so fn runs only if buf is still as it was.
 local function if_unchanged(buf, win, tick, fn)
 	if
 		not (vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf)
@@ -839,7 +823,6 @@ local function if_unchanged(buf, win, tick, fn)
 	end
 end
 
--- M-y when it does not follow C-y: asks which kill to put, with vim.ui.select()
 local function choose_kill(buf, pos)
 	local entries = edit.entries()
 	if #entries == 0 then
@@ -950,7 +933,6 @@ commands = {
 			end
 		end,
 	},
-	-- the goal column is released by pressing C-x C-n again where it is
 	set_goal_column = {
 		keeps_region = true,
 		run = function(buf, pos)
@@ -1009,7 +991,6 @@ commands = {
 			end
 		end,
 	},
-	-- right after C-y or M-y it puts the next older kill instead; otherwise it asks which kill to put
 	yank_pop = {
 		reads_key = true,
 		run = function(buf, pos)
@@ -1019,7 +1000,7 @@ commands = {
 				or yank.buf ~= buf
 				or yank.tick ~= vim.b.changedtick
 				or not vim.deep_equal(yank.to, pos)
-				or yank.key_sequence ~= started - 1
+				or yank.key_sequence ~= command_key_sequence - 1
 			then
 				choose_kill(buf, pos)
 				return
@@ -1044,12 +1025,13 @@ commands = {
 	recenter = cycling({ recenter("zz"), recenter("zt"), recenter("zb") }),
 	-- Emacs puts the cursor at the start of the line
 	move_to_window_line = vim.tbl_extend("force", cycling({ "M0", "H0", "L0" }), { motion = true }),
-	-- a second press right after drops the selection or brings it back
 	set_mark = {
 		keeps_region = true,
 		run = function(buf, pos)
 			local mark = region.mark(buf)
-			local again = previous and previous.name == "set_mark" and previous.key_sequence == started - 1
+			local again = last_command
+				and last_command.name == "set_mark"
+				and last_command.key_sequence == command_key_sequence - 1
 			if mark and again then
 				if region.is_active(buf) then
 					region.deactivate()
@@ -1084,8 +1066,6 @@ commands = {
 	},
 	-- ends the selection and nothing else; the mark stays
 	keyboard_quit = { run = function() end },
-	-- the selection from the separating line before the paragraph to the one after it, as Emacs marks it; again
-	-- while it is on, it takes the next paragraph too
 	mark_paragraph = {
 		keeps_region = true,
 		run = function(buf, pos)
@@ -1101,8 +1081,6 @@ commands = {
 			edit.set_cursor(motion.backward_paragraph(buf, to) or to)
 		end,
 	},
-	-- the mark goes to the end of the next word, and again while the selection is on, one word further away
-	-- from the cursor
 	mark_word = {
 		keeps_region = true,
 		run = function(buf, pos)
@@ -1126,7 +1104,6 @@ commands = {
 			edit.set_cursor({ 0, 0 })
 		end,
 	},
-	-- works with the mark of a dropped selection as well, and brings the selection back
 	exchange_point_and_mark = {
 		keeps_region = true,
 		run = function(buf, pos)
@@ -1153,7 +1130,6 @@ commands = {
 			end
 		end,
 	},
-	-- the word at or before the cursor and the word after it; the cursor ends after both, as in Emacs
 	transpose_words = {
 		run = function(buf, pos)
 			-- backward_word stops at the start of the buffer even before blanks or punctuation, so the start of the
@@ -1192,29 +1168,29 @@ commands = {
 	-- M-SPC leaves one space, pressed again none, and again the blanks it started from
 	cycle_spacing = {
 		run = function(buf, pos)
-			local repeated = previous
-				and previous.name == "cycle_spacing"
-				and previous.key_sequence == started - 1
-				and spacing
-				and spacing.buf == buf
-				and spacing.tick == vim.b.changedtick
+			local repeated = last_command
+				and last_command.name == "cycle_spacing"
+				and last_command.key_sequence == command_key_sequence - 1
+				and spacing_cycle
+				and spacing_cycle.buf == buf
+				and spacing_cycle.tick == vim.b.changedtick
 			if not repeated then
 				local from, to = motion.space_around(buf, pos, true)
-				spacing = { buf = buf, original = pos, blanks = edit.text(from, to), step = 0 }
+				spacing_cycle = { buf = buf, original = pos, blanks = edit.text(from, to), step = 0 }
 			else
 				local from, to = motion.space_around(buf, pos, true)
-				edit.splice(from, to, spacing.blanks)
-				edit.set_cursor(spacing.original)
-				pos = spacing.original
+				edit.splice(from, to, spacing_cycle.blanks)
+				edit.set_cursor(spacing_cycle.original)
+				pos = spacing_cycle.original
 			end
-			spacing.step = spacing.step % 3 + 1
+			spacing_cycle.step = spacing_cycle.step % 3 + 1
 			local from, to = motion.blanks_around(buf, pos)
-			if spacing.step == 1 and edit.text(from, to) ~= " " then
+			if spacing_cycle.step == 1 and edit.text(from, to) ~= " " then
 				edit.set_cursor(edit.splice(from, to, " "))
-			elseif spacing.step == 2 then
+			elseif spacing_cycle.step == 2 then
 				edit.delete(from, to)
 			end
-			spacing.tick = vim.b[buf].changedtick
+			spacing_cycle.tick = vim.b[buf].changedtick
 		end,
 	},
 	delete_indentation = { run = join_lines },
@@ -1249,7 +1225,6 @@ commands = {
 			end
 		end,
 	},
-	-- kills up to and with the next typed character, which is read after the key
 	zap_to_char = vim.tbl_extend(
 		"force",
 		killing(function(buf, pos)

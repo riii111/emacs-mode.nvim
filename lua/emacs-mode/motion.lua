@@ -67,7 +67,6 @@ function M.buffer_end(buf, pos)
 	return moved(pos, row, #line(buf, row))
 end
 
--- Skips what is not a word, line breaks included, then the word: the gap after the end of the next word.
 function M.forward_word(buf, pos)
 	local last = last_row(buf)
 	local row, col = pos[1], pos[2]
@@ -121,7 +120,7 @@ local function blank(buf, row)
 	return line(buf, row):find("^[ \t]*$") ~= nil
 end
 
--- Paragraphs are separated by lines with nothing but blanks, as in Emacs; both stop at the separating line.
+-- As in Emacs, both stop at the blank line that separates paragraphs.
 function M.forward_paragraph(buf, pos)
 	local last = last_row(buf)
 	local row = pos[1]
@@ -166,7 +165,6 @@ local function char_at(text, col)
 	return text:sub(col + 1, stop), stop
 end
 
--- the gap after the end of the sentence the cursor is in, or of the next one
 function M.forward_sentence(buf, pos)
 	local last = last_row(buf)
 	local row, col = pos[1], pos[2]
@@ -206,7 +204,6 @@ local function before(a, b)
 	return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2])
 end
 
--- past blanks and line breaks, up to the end of the buffer
 local function skip_blanks(buf, pos)
 	local last = last_row(buf)
 	local row, col = pos[1], pos[2]
@@ -226,7 +223,6 @@ local function skip_blanks(buf, pos)
 	end
 end
 
--- the start of the sentence the cursor is in, or of the previous one when the cursor is at a start already
 function M.backward_sentence(buf, pos)
 	local row = pos[1]
 	if not blank(buf, row) then
@@ -246,7 +242,6 @@ function M.backward_sentence(buf, pos)
 			return moved(pos, found[1], found[2])
 		end
 	end
-	-- the last sentence of the paragraph before
 	row = row - 1
 	while row >= 0 and blank(buf, row) do
 		row = row - 1
@@ -257,12 +252,11 @@ function M.backward_sentence(buf, pos)
 	return M.backward_sentence(buf, { row, #line(buf, row) })
 end
 
--- the blanks around the cursor on its line, as { from, to }
 function M.blanks_around(buf, pos)
 	return M.space_around(buf, pos, false)
 end
 
--- Spaces and tabs around pos, and the line breaks between them when newlines is true, as { from, to }.
+-- Returns { from, to }; with newlines, the blanks reach across line breaks.
 function M.space_around(buf, pos, newlines)
 	local from_row, from_col = pos[1], pos[2]
 	while true do
@@ -293,7 +287,6 @@ end
 
 local INDENT = { [" "] = true, ["\t"] = true, ["\u{3000}"] = true }
 
--- the first character of the line that is not a blank, or the end of a line of blanks
 function M.back_to_indentation(buf, pos)
 	local text = line(buf, pos[1])
 	local col = 0
@@ -307,7 +300,6 @@ function M.back_to_indentation(buf, pos)
 	return moved(pos, pos[1], col)
 end
 
--- the width in cells of the text before the byte column col
 function M.display_column(buf, pos)
 	return vim.fn.strdisplaywidth(line(buf, pos[1]):sub(1, pos[2]))
 end
@@ -341,7 +333,7 @@ function M.char_position(buf, n)
 	return { last, #line(buf, last) }
 end
 
--- the gap after the next char at or after the cursor, over line breaks; nil when there is none
+-- Searches from the cursor onward across line breaks; char is a whole character.
 function M.after_next(buf, pos, char)
 	local last = last_row(buf)
 	local col = pos[2]

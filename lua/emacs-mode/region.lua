@@ -19,7 +19,6 @@ local function clear_highlight()
 	end
 end
 
--- forgets the mark, as when the mode ends
 function M.clear()
 	if current and vim.api.nvim_buf_is_valid(current.buf) then
 		vim.api.nvim_buf_clear_namespace(current.buf, M.namespace, 0, -1)
@@ -27,8 +26,7 @@ function M.clear()
 	current = nil
 end
 
--- Puts the mark at pos; active tells whether the selection starts there. The mark stays before text inserted
--- at it, as an Emacs marker does.
+-- The mark stays before text inserted at it, as an Emacs marker does.
 function M.set_mark(buf, pos, active, kind)
 	if current and current.buf ~= buf then
 		M.clear()
@@ -44,7 +42,6 @@ function M.set_mark(buf, pos, active, kind)
 	end
 end
 
--- the position of the mark in buf, active or not
 function M.mark(buf)
 	if not current or current.buf ~= buf then
 		return nil
@@ -61,7 +58,6 @@ function M.kind()
 	return current and current.kind
 end
 
--- Moves the mark and leaves the selection as it is.
 function M.move_mark(buf, pos)
 	M.set_mark(buf, pos, M.is_active(buf), current and current.kind)
 end
@@ -74,7 +70,6 @@ function M.activate(buf, kind)
 	end
 end
 
--- Drops the selection and its highlight; the mark stays.
 function M.deactivate()
 	if current then
 		current.active = false
@@ -82,7 +77,7 @@ function M.deactivate()
 	end
 end
 
--- The ends of the selection in text order, or nil when there is none or it is empty.
+-- nil when there is no selection or it is empty
 function M.bounds(buf, cursor)
 	local mark = M.is_active(buf) and M.mark(buf)
 	if not mark or (mark[1] == cursor[1] and mark[2] == cursor[2]) then
@@ -94,18 +89,17 @@ function M.bounds(buf, cursor)
 	return mark, cursor
 end
 
--- whether the selection is active and buf changed since it was last in step; typed text ends it
+-- Whether buf changed behind an active selection, as typed text does; the caller ends the selection.
 function M.changed(buf)
 	return M.is_active(buf) and vim.api.nvim_buf_get_changedtick(buf) ~= current.tick
 end
 
--- Draws the selection up to the cursor. keep_step tells that the buffer is as the selection expects it, which
--- the mode's own commands call for after their changes.
-function M.draw(buf, cursor, keep_step)
+-- sync_tick accepts the buffer's current changes as the mode's own, so that they do not end the selection.
+function M.draw(buf, cursor, sync_tick)
 	if not M.is_active(buf) then
 		return
 	end
-	if keep_step then
+	if sync_tick then
 		current.tick = vim.api.nvim_buf_get_changedtick(buf)
 	end
 	local from, to = M.mark(buf), cursor

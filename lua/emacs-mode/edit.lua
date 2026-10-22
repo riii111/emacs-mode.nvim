@@ -1,8 +1,7 @@
 -- Text changes through the buffer API, so no register, mark or 'clipboard' setting is involved.
 local M = {}
 
--- Killed texts, the latest first, shared by all buffers and kept after the mode ends. C-y puts back the one
--- at the yank pointer, which a kill puts back on the latest and M-y moves to older ones.
+-- Kills are shared by all buffers and kept after the mode ends. A kill resets the yank pointer to the latest one.
 local MAX_KILLS = 60
 local kills = {}
 local pointer = 1
@@ -22,7 +21,6 @@ function M.ordered(from, to)
 	return ordered(from, to)
 end
 
--- the text between two positions, in either order
 function M.text(from, to)
 	from, to = ordered(from, to)
 	return table.concat(vim.api.nvim_buf_get_text(0, from[1], from[2], to[1], to[2], {}), "\n")
@@ -37,7 +35,7 @@ function M.splice(from, to, text)
 	return { from[1] + #lines - 1, (#lines == 1 and from[2] or 0) + #lines[#lines] }
 end
 
--- Deletes the text between two positions (in either order), leaves the cursor there and returns the text.
+-- Leaves the cursor at the start of the deleted text and returns it.
 function M.delete(from, to)
 	local text = M.text(from, to)
 	from, to = ordered(from, to)
@@ -46,7 +44,7 @@ function M.delete(from, to)
 	return text
 end
 
--- Inserts text at a position, leaves the cursor after it and returns that position.
+-- Leaves the cursor after the new text and returns that position.
 function M.insert(pos, text)
 	local lines = vim.split(text, "\n", { plain = true })
 	vim.api.nvim_buf_set_text(0, pos[1], pos[2], pos[1], pos[2], lines)
@@ -55,7 +53,7 @@ function M.insert(pos, text)
 	return after
 end
 
--- Replaces the text between two positions, leaves the cursor after the new text and returns that position.
+-- Unlike splice, moves the cursor: it ends after the new text, whose position is returned.
 function M.replace(from, to, text)
 	M.delete(from, to)
 	from = vim.api.nvim_win_get_cursor(0)
@@ -79,22 +77,20 @@ function M.store(text, how)
 	pointer = 1
 end
 
--- the latest kill
 function M.killed()
 	return kills[1]
 end
 
--- the kill C-y puts back
 function M.to_yank()
 	return kills[pointer]
 end
 
--- the kills, the latest first
+-- the latest first
 function M.entries()
 	return vim.list_slice(kills)
 end
 
--- Moves the yank pointer to the kill at index of entries() and returns that kill.
+-- index is a position in entries()
 function M.select(index)
 	if kills[index] then
 		pointer = index
@@ -102,7 +98,7 @@ function M.select(index)
 	return kills[index]
 end
 
--- Moves the yank pointer to the next older kill, around to the latest after the oldest, and returns that kill.
+-- wraps from the oldest kill to the latest
 function M.rotate()
 	if #kills == 0 then
 		return nil

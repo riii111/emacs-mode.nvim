@@ -19,8 +19,7 @@ end
 local OPENERS = chars.set("([{（［｛〔〈《「『【")
 local CLOSERS = chars.set(")]}）］｝〕〉》」』】")
 
--- Like Emacs' fixup-whitespace, a space joins two words, but not after an opening bracket, before a closing one,
--- or next to a CJK character, where lines are joined without a space as when filling.
+-- Like Emacs' fixup-whitespace; lines next to a CJK character join without a space, as when filling.
 local function needs_space(before, after)
 	if before == "" or after == "" then
 		return false
@@ -29,8 +28,7 @@ local function needs_space(before, after)
 	return not (OPENERS[left] or CLOSERS[right] or chars.cjk(left) or chars.cjk(right))
 end
 
--- Joins row to the line before it, leaving the blanks around the join as one space or none; the fill prefix at
--- the start of row goes. Returns the position of the join.
+-- Drops the fill prefix at the start of row. Returns the position of the join.
 function M.join_previous(row, prefix)
 	local previous, current = line(row - 1), line(row)
 	local start = (prefix ~= "" and current:sub(1, #prefix) == prefix) and #prefix or 0
@@ -42,7 +40,6 @@ function M.join_previous(row, prefix)
 	return { row - 1, keep }
 end
 
--- the blanks from column `from` to `to`, using tabs where 'expandtab' is off
 local function padding(from, to)
 	if to <= from then
 		return ""
@@ -60,8 +57,7 @@ local function padding(from, to)
 	return pad .. string.rep(" ", to - column)
 end
 
--- Splits the line at the first non-blank at or after pos: the rest goes to a new line, at the column it had,
--- below the part before. The fill prefix is repeated when the line starts with it.
+-- Splits at the first non-blank at or after pos; the rest keeps its display column. Returns the position of the split.
 function M.split(pos, prefix)
 	local text = line(pos[1])
 	local col = pos[2]
@@ -85,8 +81,7 @@ local function delete_rows(first, last)
 	vim.api.nvim_buf_set_lines(0, first, last + 1, true, {})
 end
 
--- Emacs' delete-blank-lines: on a blank line, the blank lines around it go but one, or that one when it is alone;
--- on any other line, the blank lines after it go. Returns the row of the cursor.
+-- Emacs' delete-blank-lines. Returns the row for the cursor.
 function M.delete_blank(row)
 	local last = last_row()
 	local after = row
@@ -119,8 +114,7 @@ function M.delete_blank(row)
 	return before
 end
 
--- Exchanges the line and the one before it, or after it on the first line, as Emacs' transpose-lines does.
--- Returns the position after both, or nil when there is no second line.
+-- Like Emacs' transpose-lines, the first line swaps with the one after it. Returns nil when there is no second line.
 function M.transpose(row)
 	local last = last_row()
 	local first = row == 0 and 0 or row - 1
