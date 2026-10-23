@@ -179,7 +179,6 @@ function M.forward_sentence(buf, pos)
 			local char, stop = char_at(text, col)
 			seen = seen or not char:find("^[ \t]$")
 			if ENDS[char] or ASCII_ENDS[char] then
-				-- 「本当！？」 ends once, after the closer
 				local after = stop
 				while after < #text do
 					local next_char, next_stop = char_at(text, after)
@@ -254,7 +253,6 @@ function M.blanks_around(buf, pos)
 	return M.space_around(buf, pos, false)
 end
 
--- With newlines, the blanks reach across line breaks.
 function M.space_around(buf, pos, newlines)
 	local from_row, from_col = pos[1], pos[2]
 	while true do
@@ -302,7 +300,7 @@ function M.display_column(buf, pos)
 	return vim.fn.strdisplaywidth(line(buf, pos[1]):sub(1, pos[2]))
 end
 
--- Like Emacs' move-to-column: a column inside a character lands after it, one past the end of the line at its end.
+-- Like Emacs' move-to-column.
 function M.column_position(buf, row, column)
 	local text = line(buf, row)
 	local width, col = 0, 0
@@ -331,7 +329,6 @@ function M.char_position(buf, n)
 	return { last, #line(buf, last) }
 end
 
--- Searches from the cursor onward across line breaks; char is a whole character.
 function M.after_next(buf, pos, char)
 	local last = last_row(buf)
 	local col = pos[2]
@@ -344,7 +341,6 @@ function M.after_next(buf, pos, char)
 	end
 end
 
--- Up to the line break, or the line break itself when only blanks are left before it.
 function M.kill_line_end(buf, pos)
 	local text = line(buf, pos[1])
 	if text:sub(pos[2] + 1):find("^[ \t]*$") and pos[1] < last_row(buf) then

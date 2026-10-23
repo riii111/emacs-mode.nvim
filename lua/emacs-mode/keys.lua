@@ -1,7 +1,5 @@
 local M = {}
 
--- Several keys can run one command: Emacs' own aliases, the keys of the kitty keyboard protocol for what terminals
--- send otherwise, and the keypad.
 M.single = {
 	["<C-f>"] = "forward_char",
 	["<Right>"] = "forward_char",
@@ -123,7 +121,6 @@ M.shifted = {
 	["<S-PageUp>"] = "scroll_up",
 }
 
--- The second keys are stored in the form they have when read.
 local function prefix(name, label, commands)
 	local keys = {}
 	for key, command in pairs(commands) do

@@ -34,7 +34,6 @@ function M.splice(from, to, text)
 	return { from[1] + #lines - 1, (#lines == 1 and from[2] or 0) + #lines[#lines] }
 end
 
--- Leaves the cursor at the start of the deleted text.
 function M.delete(from, to)
 	local text = M.text(from, to)
 	from, to = ordered(from, to)
@@ -43,7 +42,6 @@ function M.delete(from, to)
 	return text
 end
 
--- Leaves the cursor after the new text.
 function M.insert(pos, text)
 	local lines = vim.split(text, "\n", { plain = true })
 	vim.api.nvim_buf_set_text(0, pos[1], pos[2], pos[1], pos[2], lines)

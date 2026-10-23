@@ -57,7 +57,6 @@ local function highlighted()
 	end
 end
 
--- waits for neoscroll's animation, when C-v, M-v or C-l started one
 local function settle()
 	if package.loaded["neoscroll.scroll"] then
 		vim.wait(2000, function()
@@ -105,7 +104,6 @@ end
 
 local buffers = {}
 
--- a new buffer with the text of spec and the Normal mode cursor on (or before the end of) its "|"
 local function open(spec)
 	feed("<Esc>")
 	vim.cmd.enew()
@@ -117,8 +115,6 @@ local function open(spec)
 	return pos
 end
 
--- Opens spec, starts the mode with `e`, puts the cursor on "|", types input and leaves; returns the state
--- just before leaving.
 local function session(spec, input)
 	local pos = open(spec)
 	feed(("e<Cmd>lua emacs_test.place(%d, %d)<CR>"):format(pos[1], pos[2]) .. input .. snap("end") .. "<Esc>")
@@ -1079,7 +1075,6 @@ cases["a prefix key waits for the next key, or is given up with Esc or C-g"] = f
 	})
 end
 
--- keys sent one at a time to another Neovim that runs the mode, with time between them to run out any timeout
 cases["a prefix key does not time out and keeps the keys after it"] = function()
 	local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 	local chan = vim.fn.jobstart({

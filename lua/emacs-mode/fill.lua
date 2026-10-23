@@ -288,7 +288,6 @@ function M.units(lines)
 	return units
 end
 
--- No space goes where a line break stands next to CJK text.
 local function join_bodies(bodies)
 	local parts, tail = {}, nil
 	for _, body in ipairs(bodies) do
@@ -419,7 +418,7 @@ local function render(list)
 	return text
 end
 
--- lead starts the first line and prefix the others. A line that cannot be broken legally goes beyond the limit.
+-- A line that cannot be broken legally goes beyond the limit.
 local function layout(atoms, lead, prefix, limit)
 	local out, line, line_width = {}, {}, 0
 	for _, atom in ipairs(atoms) do
