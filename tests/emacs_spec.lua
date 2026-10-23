@@ -1,8 +1,8 @@
--- Integration tests of emacs-mode. Keys go through the real mappings: each case types its keys in one
--- feedkeys() call, records the state on the way with <Cmd> and leaves with <Esc>.
+-- Integration tests. Keys go through the real mappings. Each case types its keys in one feedkeys() call, records
+-- the state along the way with <Cmd> and leaves with <Esc>.
 --
--- `make test` runs them without other plugins. A configuration with blink.cmp or neoscroll can run them as
--- well, to test the mode together with those: dofile("<this file>")() inside Neovim.
+-- `make test` runs them without other plugins. To test with blink.cmp or neoscroll, run dofile("<this file>")()
+-- inside a Neovim that has them.
 local emacs = require("emacs-mode")
 local edit = require("emacs-mode.edit")
 local region = require("emacs-mode.region")
@@ -57,7 +57,6 @@ local function highlighted()
 	end
 end
 
--- waits for neoscroll's animation, when C-v, M-v or C-l started one
 local function settle()
 	if package.loaded["neoscroll.scroll"] then
 		vim.wait(2000, function()
@@ -105,7 +104,6 @@ end
 
 local buffers = {}
 
--- a new buffer with the text of spec and the Normal mode cursor on (or before the end of) its "|"
 local function open(spec)
 	feed("<Esc>")
 	vim.cmd.enew()
@@ -117,8 +115,6 @@ local function open(spec)
 	return pos
 end
 
--- Opens spec, starts the mode with `e`, puts the cursor on "|", types input and leaves; returns the state
--- just before leaving.
 local function session(spec, input)
 	local pos = open(spec)
 	feed(("e<Cmd>lua emacs_test.place(%d, %d)<CR>"):format(pos[1], pos[2]) .. input .. snap("end") .. "<Esc>")
@@ -240,7 +236,7 @@ cases["line and buffer ends"] = function()
 	check("a\nb|c\nd", "<M-lt>", "|a\nbc\nd")
 	check("a\nb|c\nde", "<M->>", "a\nbc\nde|")
 	check("a\nb|c\n", "<M->>", "a\nbc\n|")
-	-- what Option+Shift+, and Option+Shift+. send through the kitty keyboard protocol
+	-- The kitty keyboard protocol sends Option+Shift+, and Option+Shift+. like this.
 	check("a\nb|c\nd", "<M-S-,>", "|a\nbc\nd")
 	check("a\nb|c\nde", "<M-S-.>", "a\nbc\nde|")
 end
@@ -315,7 +311,7 @@ cases["C-y puts back the last kill, also in other buffers and after the mode"] =
 end
 
 cases["M-y goes back through older kills"] = function()
-	-- a kill puts the yank pointer back on the latest kill; 60 kills are kept, so the oldest of these 61 is gone
+	-- A kill moves the yank pointer back to the latest kill. Only 60 kills are kept, so the oldest of these 61 is dropped.
 	local function kills(...)
 		for _, text in ipairs({ ... }) do
 			edit.store(text, "replace")
@@ -360,7 +356,7 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 	eq({ 0, 2, 0, 4 }, T.snaps.on.region, "highlighted region")
 	eq({ nil, true, "abcd|ef" }, { T.snaps.quit.region, T.snaps.quit.active, T.snaps.quit.text }, "after C-g")
 
-	-- Neovim fires these when it waits for a key, which it does not while the test's keys are queued
+	-- Neovim fires CursorMovedI and TextChangedI when it waits for a key. It never waits while the test's keys are queued.
 	local idle = "<Cmd>doautocmd CursorMovedI<CR><Cmd>doautocmd TextChangedI<CR>"
 	session("ab|cd", "<C-Space><Right><Right>" .. idle .. snap("arrows") .. "X" .. idle .. snap("typed"))
 	eq({ 0, 2, 0, 4 }, T.snaps.arrows.region, "region stretched by the arrow keys")
@@ -368,7 +364,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 	session("ab|cd", "<C-Space><C-f>")
 	eq({}, vim.api.nvim_buf_get_extmarks(0, region.namespace, 0, -1, {}), "region after the mode")
 
-	-- the mark set right after typing stays: the change came before it
 	check("|", "abc<C-Space>" .. idle .. "<C-b><C-b>" .. idle .. "<C-w>", "a|", "bc")
 	local ok, err = pcall(function()
 		emacs.setup({ start_key = "e", set_mark = { "<C-Space>", "<C-Space>", "<C-g>" } })
@@ -380,7 +375,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 
 	edit.store("kept", "replace")
 	check("ab|cd", "<C-Space><C-w>", "ab|cd", "kept")
-	-- C-y ends the region, so C-w kills the word
 	check("ab|cd", "<C-Space><C-y><C-b><C-w>", "|tcd", "abkep")
 	check("foo bar|", "<C-w>", "foo |", "bar")
 
@@ -498,7 +492,6 @@ cases["any other key ends a row of kills"] = function()
 	check("a|bc\nde", "<C-k><BS><C-k>", "|de", "\n")
 	check("a|bc\nde", "<C-k><C-/><C-k>", "a|\nde", "bc")
 	check("a|b", "<C-k><C-k><C-u>", "|", "ab")
-	-- a row does not continue in another buffer or after the mode ended
 	session("a|bc", "<C-k>")
 	check("x|y", "<C-k>", "x|", "y")
 	open("a|b")
@@ -538,7 +531,7 @@ end
 
 cases["every edit is one undo step of its own"] = function()
 	edit.store("Y", "replace")
-	-- <Del> and <C-h> run the same commands as <C-d> and <BS>, which the deletion case checks
+	-- <Del> and <C-h> run the same commands as <C-d> and <BS>, which the deletion case covers.
 	for _, input in ipairs({
 		"<C-d>",
 		"<BS>",
@@ -653,7 +646,7 @@ cases["C-n and C-p move by screen lines and keep the column"] = function()
 	vim.wo.statuscolumn = ""
 	vim.wo.list = false
 	vim.cmd("setlocal showbreak=NONE")
-	-- session() opens a new buffer, which takes the global value
+	-- session() opens a new buffer. It takes the global value.
 	local tabstop = vim.go.tabstop
 	vim.go.tabstop = 8
 	local options = { vim.wo.wrap, vim.wo.linebreak, vim.wo.breakindent, vim.o.virtualedit, vim.wo.virtualedit }
@@ -689,7 +682,6 @@ cases["C-n and C-p move by screen lines and keep the column"] = function()
 	for i = 1, 7 do
 		table.insert(rows, T.snaps["d" .. i].screen_row - T.snaps["u" .. (8 - i)].screen_row)
 	end
-	-- the same positions as gj and gk in Normal mode, but after the last character where the line is too short
 	eq({
 		{ 1, 23 },
 		{ 2, 2 },
@@ -739,7 +731,7 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		lines[i] = "line " .. i
 	end
 	local spec = table.concat(lines, "\n"):gsub("line 50", "lin|e 50", 1)
-	-- the full configuration lazy-loads neoscroll, which animates these keys
+	-- A full configuration lazy-loads neoscroll. It animates these keys.
 	local smooth = pcall(require, "neoscroll")
 	local function at(label)
 		local snapshot = T.snaps[label]
@@ -751,19 +743,15 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		"<C-v>" .. snap("down") .. "<C-v>" .. snap("down2") .. "<M-v><M-v>" .. snap("up")
 	)
 	if smooth then
-		-- neoscroll scrolls a whole window and the cursor with it
 		eq({ 11, 11, 0, 1, true }, at("down"), "C-v")
 		eq({ 21, 21, 0, 1, true }, at("down2"), "C-v again")
 	else
-		-- a window of 10 lines scrolls by 8, keeping 2 lines on the screen
 		eq({ 9, 9, 0, 1, true }, at("down"), "C-v")
 		eq({ 17, 17, 0, 1, true }, at("down2"), "C-v again")
 	end
 	eq(1, T.snaps.up.top, "M-v")
 
 	if smooth then
-		-- the animation passes through Normal mode without ending the mode, and Esc during it ends the mode with
-		-- the cursor shape put back once neoscroll stops hiding the cursor
 		local guicursor = vim.o.guicursor
 		open(spec)
 		feed("e<C-v>" .. snap("scrolled") .. "<C-v><Esc>")
@@ -777,8 +765,8 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		settle()
 		eq({ guicursor, {} }, { vim.o.guicursor, buffer_maps(0) }, "after Esc during the animation")
 
-		-- the mode ends right after Esc, before the animation is over, so that Insert mode entered again during
-		-- the animation is plain Insert mode
+		-- The mode ends right after Esc, before the animation is over. Insert mode entered again during the animation must
+		-- be plain Insert mode.
 		open(spec)
 		feed("e<C-v><Esc>")
 		local scrolling_then
@@ -792,7 +780,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		eq(true, scrolling_then, "the mode ended only after the animation")
 		settle()
 
-		-- leaving the buffer during the animation puts the cursor shape back after neoscroll shows it again
 		open(spec)
 		feed("e<C-v><C-o>:enew<CR>")
 		table.insert(buffers, vim.api.nvim_get_current_buf())
@@ -805,7 +792,7 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		)
 	end
 
-	-- the state after every command, since a snapshot between them would be a key that ends the cycle
+	-- Records the state after every command. A snapshot taken between commands would add a key that ends the cycle.
 	local function after_each(input)
 		local run = emacs.run
 		local states = {}
@@ -925,7 +912,7 @@ cases["mappings of the buffer come back as they were"] = function()
 		end
 		return found
 	end
-	-- plugins may map keys of their own on the first InsertEnter of a buffer (blink.cmp does)
+	-- Plugins may map keys of their own on the first InsertEnter of a buffer, as blink.cmp does.
 	feed("i<Esc>")
 	local before = maps()
 	vim.api.nvim_buf_set_lines(0, 0, -1, true, { "abc" })
@@ -944,7 +931,7 @@ cases["mappings of the buffer come back as they were"] = function()
 end
 
 cases["registers stay untouched"] = function()
-	-- with 'clipboard' the unnamed register is the system clipboard; the mode reads and writes no register either way
+	-- With 'clipboard' set, the unnamed register is the system clipboard. The mode reads and writes no register either way.
 	local clipboard = vim.o.clipboard
 	vim.o.clipboard = ""
 	local names = { '"', "-", "0", "1", "a", "." }
@@ -1086,7 +1073,6 @@ cases["a prefix key waits for the next key, or is given up with Esc or C-g"] = f
 	})
 end
 
--- keys sent one at a time to another Neovim that runs the mode, with time between them to run out any timeout
 cases["a prefix key does not time out and keeps the keys after it"] = function()
 	local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 	local chan = vim.fn.jobstart({
@@ -1321,7 +1307,6 @@ cases["M-y alone asks which kill to put"] = function()
 	session("x|", "<M-y>2<CR><C-/>" .. snap("undone"))
 	eq("x", (T.snaps.undone.text:gsub("|", "")))
 
-	-- an interface that answers later puts the kill if nothing changed
 	local select = vim.ui.select
 	vim.ui.select = function(items, _, callback)
 		vim.schedule(function()
@@ -1373,7 +1358,7 @@ cases["C-x C-u and C-x C-l change the case of the region"] = function()
 		{ "|日本語 abc é\nxy", "<C-Space><C-e><C-x><C-u>", "日本語 ABC É|\nxy" },
 		{ "|ÀB e\u{301}x", "<C-Space><C-e><C-x><C-l>", "àb e\u{301}x|" },
 		{ "|ab\ncd", "<C-Space><C-n><C-e><C-x><C-u>", "AB\nCD|" },
-		-- the upper case of a letter can be shorter in bytes
+		-- ı is 2 bytes. Its upper case I is 1 byte.
 		{ "|aı", "<C-Space><C-e><C-x><C-u>", "AI|" },
 		{ "ab|cd", "<C-Space><C-e><C-g><C-x><C-u>", "abCD|" },
 		{ "ab|cd", "<S-End><C-x><C-u>", "abCD|" },
@@ -1384,7 +1369,6 @@ cases["C-x C-u and C-x C-l change the case of the region"] = function()
 	session("ab|cd", "<C-Space><C-e><C-x><C-u>" .. snap("end"))
 	local state = T.snaps["end"]
 	eq({ false, { 0, 2 } }, { state.selected, state.mark }, "selection and mark after C-x C-u")
-	-- the mark after the cursor stays at the end of the text that changed
 	session("ab|ı", "<C-Space><C-e><C-x><C-x><C-x><C-u>" .. snap("end"))
 	state = T.snaps["end"]
 	eq({ "ab|I", { 0, 3 } }, { state.text, state.mark })
@@ -1482,7 +1466,6 @@ cases["M-q breaks Japanese and English text where it is allowed"] = function()
 			width_keys(12) .. "<M-q>",
 			"|日本語の文章\nです。次の文\nです。",
 		},
-		-- kinsoku: 。 does not start a line
 		{ "|あいうえお。かきく", width_keys(10) .. "<M-q>", "|あいうえ\nお。かきく" },
 		{ "|日本語\nEnglish\nword", "<M-q>", "|日本語English word" },
 		{ "|日本語\n日本語", "<M-q>", "|日本語日本語" },
@@ -1580,7 +1563,6 @@ cases["undo and redo go through Neovim's history"] = function()
 		}, what)
 		eq(true, T.snaps.again.active, what)
 	end
-	-- with nothing to redo nothing happens, and Backspace is not redo
 	check("a|", "<C-?>", "a|")
 	check("ab|", "<BS><BS>", "|")
 end
@@ -1656,7 +1638,7 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 		session(spec, input .. snap("end"))
 		return { T.snaps["end"].top, T.snaps["end"].pos[1] }
 	end
-	-- C-a first: a completion menu that is open takes the Page keys
+	-- C-a comes first. An open completion menu would take the Page keys.
 	eq(at("<C-v>"), at("<C-a><PageDown>"))
 	eq(at("<C-v>"), at("<C-a><kPageDown>"))
 	eq(at("<C-v><C-v><M-v>"), at("<C-a><PageDown><PageDown><PageUp>"))
@@ -1674,7 +1656,7 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 end
 
 cases["Up and Down keep the mappings they had on an open completion menu"] = function()
-	-- blink.cmp maps Down in each buffer itself, over the mapping this case sets
+	-- blink.cmp maps Down itself in each buffer and would replace the mapping this case sets.
 	if package.loaded["blink.cmp"] then
 		return
 	end
@@ -1719,7 +1701,6 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 		"global mapping"
 	)
 	pcall(vim.keymap.del, "i", "<Down>")
-	-- an expression that calls a function of the script that mapped it
 	local script = vim.fn.tempname() .. ".vim"
 	vim.fn.writefile({
 		"function! s:Down()",
@@ -1799,7 +1780,6 @@ local function completion()
 	check("alpha alphabet\nal|\nnext", show .. "<C-p>", "al|pha alphabet\nal\nnext")
 	check("alpha alphabet\nal|", show .. "<C-y>", "alpha alphabet\nalKILL|")
 	check("alpha alphabet\nal|", show .. "<C-e>", "alpha alphabet\nal|")
-	-- a previewed item is taken back, not accepted
 	local previewed = "<Cmd>lua vim.wait(1000, function() return vim.fn.getline('.') ~= 'al' end)<CR>"
 	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. snap("preview") .. "<C-a>", "alpha alphabet\n|al")
 	assert(T.snaps.preview.text ~= "alpha alphabet\nal|", "selecting did not preview an item")

@@ -1,4 +1,4 @@
--- Text changes through the buffer API, so no register, mark or 'clipboard' setting is involved.
+-- Text changes go through the buffer API. No register, mark or 'clipboard' setting is involved.
 local M = {}
 
 -- Kills are shared by all buffers and kept after the mode ends. A kill resets the yank pointer to the latest one.
@@ -26,8 +26,7 @@ function M.text(from, to)
 	return table.concat(vim.api.nvim_buf_get_text(0, from[1], from[2], to[1], to[2], {}), "\n")
 end
 
--- Replaces the text between two positions in one change, which keeps marks at its ends where they were.
--- Returns the position after the new text.
+-- A single change keeps marks at either end where they were.
 function M.splice(from, to, text)
 	from, to = ordered(from, to)
 	local lines = vim.split(text, "\n", { plain = true })
@@ -35,7 +34,6 @@ function M.splice(from, to, text)
 	return { from[1] + #lines - 1, (#lines == 1 and from[2] or 0) + #lines[#lines] }
 end
 
--- Leaves the cursor at the start of the deleted text and returns it.
 function M.delete(from, to)
 	local text = M.text(from, to)
 	from, to = ordered(from, to)
@@ -44,7 +42,6 @@ function M.delete(from, to)
 	return text
 end
 
--- Leaves the cursor after the new text and returns that position.
 function M.insert(pos, text)
 	local lines = vim.split(text, "\n", { plain = true })
 	vim.api.nvim_buf_set_text(0, pos[1], pos[2], pos[1], pos[2], lines)
@@ -53,7 +50,7 @@ function M.insert(pos, text)
 	return after
 end
 
--- Unlike splice, moves the cursor: it ends after the new text, whose position is returned.
+-- Unlike splice, moves the cursor.
 function M.replace(from, to, text)
 	M.delete(from, to)
 	from = vim.api.nvim_win_get_cursor(0)
@@ -64,7 +61,6 @@ function M.set_cursor(pos)
 	set_cursor(pos)
 end
 
--- how: "replace" starts over, "append" and "prepend" join a kill that continues the previous one
 function M.store(text, how)
 	if how == "append" and kills[1] then
 		kills[1] = kills[1] .. text
@@ -85,12 +81,12 @@ function M.to_yank()
 	return kills[pointer]
 end
 
--- the latest first
+-- Latest first.
 function M.entries()
 	return vim.list_slice(kills)
 end
 
--- index is a position in entries()
+-- index is a position in entries().
 function M.select(index)
 	if kills[index] then
 		pointer = index
@@ -98,7 +94,6 @@ function M.select(index)
 	return kills[index]
 end
 
--- wraps from the oldest kill to the latest
 function M.rotate()
 	if #kills == 0 then
 		return nil

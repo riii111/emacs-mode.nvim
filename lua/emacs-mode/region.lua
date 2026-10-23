@@ -1,13 +1,11 @@
--- The mark, and the region between the mark and the cursor, which is highlighted while it is active as in Emacs'
--- Transient Mark mode. The mark and the selection are separate: dropping the selection keeps the mark.
--- Positions are { row, col } as in motion.lua. Only one buffer has a mark at a time.
+-- The mark, and the region between the mark and the cursor. An active region is highlighted, as in Emacs' Transient
+-- Mark mode. Dropping the selection keeps the mark. Positions are { row, col }, as in motion.lua. Only one buffer
+-- has a mark at a time.
 local M = {}
 
 M.namespace = vim.api.nvim_create_namespace("emacs_region")
 
--- buf, the extmark ids of the mark and the highlight, whether the region is active, its kind ("mark": set with
--- the mark keys; "shift": started by a shifted move, which an unshifted move ends) and the changedtick it was
--- last in step with
+-- kind: "mark" is set with the mark keys. "shift" starts with a shifted move and ends with an unshifted one.
 local current
 
 local function clear_highlight()
@@ -26,7 +24,7 @@ function M.clear()
 	current = nil
 end
 
--- The mark stays before text inserted at it, as an Emacs marker does.
+-- Text inserted at the mark goes after it, as with an Emacs marker.
 function M.set_mark(buf, pos, active, kind)
 	if current and current.buf ~= buf then
 		M.clear()
@@ -77,7 +75,6 @@ function M.deactivate()
 	end
 end
 
--- nil when there is no selection or it is empty
 function M.bounds(buf, cursor)
 	local mark = M.is_active(buf) and M.mark(buf)
 	if not mark or (mark[1] == cursor[1] and mark[2] == cursor[2]) then
@@ -89,12 +86,12 @@ function M.bounds(buf, cursor)
 	return mark, cursor
 end
 
--- Whether buf changed behind an active selection, as typed text does; the caller ends the selection.
+-- True when buf changed behind an active selection, for example by typed text. The caller ends the selection.
 function M.changed(buf)
 	return M.is_active(buf) and vim.api.nvim_buf_get_changedtick(buf) ~= current.tick
 end
 
--- sync_tick accepts the buffer's current changes as the mode's own, so that they do not end the selection.
+-- sync_tick records the buffer's current changes as the mode's own. They then do not end the selection.
 function M.draw(buf, cursor, sync_tick)
 	if not M.is_active(buf) then
 		return

@@ -1,4 +1,4 @@
--- Edits of whole lines and of the blanks between them, through the buffer API of the current buffer.
+-- Edits of whole lines and of the blanks between them, in the current buffer through the buffer API.
 -- Rows are 0-based and columns are byte columns, as in motion.lua.
 local chars = require("emacs-mode.chars")
 
@@ -19,7 +19,7 @@ end
 local OPENERS = chars.set("([{（［｛〔〈《「『【")
 local CLOSERS = chars.set(")]}）］｝〕〉》」』】")
 
--- Like Emacs' fixup-whitespace; lines next to a CJK character join without a space, as when filling.
+-- Like Emacs' fixup-whitespace. Lines next to a CJK character join without a space, as when filling.
 local function needs_space(before, after)
 	if before == "" or after == "" then
 		return false
@@ -28,7 +28,6 @@ local function needs_space(before, after)
 	return not (OPENERS[left] or CLOSERS[right] or chars.cjk(left) or chars.cjk(right))
 end
 
--- Drops the fill prefix at the start of row. Returns the position of the join.
 function M.join_previous(row, prefix)
 	local previous, current = line(row - 1), line(row)
 	local start = (prefix ~= "" and current:sub(1, #prefix) == prefix) and #prefix or 0
@@ -57,7 +56,7 @@ local function padding(from, to)
 	return pad .. string.rep(" ", to - column)
 end
 
--- Splits at the first non-blank at or after pos; the rest keeps its display column. Returns the position of the split.
+-- The text after the split keeps its display column on the new line.
 function M.split(pos, prefix)
 	local text = line(pos[1])
 	local col = pos[2]
@@ -81,7 +80,7 @@ local function delete_rows(first, last)
 	vim.api.nvim_buf_set_lines(0, first, last + 1, true, {})
 end
 
--- Emacs' delete-blank-lines. Returns the row for the cursor.
+-- Emacs' delete-blank-lines.
 function M.delete_blank(row)
 	local last = last_row()
 	local after = row
@@ -114,7 +113,7 @@ function M.delete_blank(row)
 	return before
 end
 
--- Like Emacs' transpose-lines, the first line swaps with the one after it. Returns nil when there is no second line.
+-- Like Emacs' transpose-lines. A line swaps with the one before it, except the first, which swaps with the next.
 function M.transpose(row)
 	local last = last_row()
 	local first = row == 0 and 0 or row - 1

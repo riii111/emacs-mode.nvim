@@ -1,17 +1,16 @@
--- Paragraph filling in the way of Emacs' fill-paragraph, for text that mixes Latin and CJK characters. Lines that
--- Markdown would read differently once joined (code, headings, tables, HTML, hard line breaks, ...) are left alone.
--- Rows are 0-based as in motion.lua.
+-- Paragraph filling like Emacs' fill-paragraph, for text that mixes Latin and CJK characters.
+-- Lines that Markdown would read differently once joined are left alone: code, headings, tables, HTML, hard line
+-- breaks and so on. Rows are 0-based, as in motion.lua.
 local chars = require("emacs-mode.chars")
 
 local M = {}
 
 local cjk, first_char, last_char = chars.cjk, chars.first, chars.last
 
--- declared first so that M.fill leads the file
 local fill_unit
 
--- Fills the paragraphs that overlap the rows from..to. Returns the replacements { first, last, lines, count, place }
--- from the last to the first, and the note of the first paragraph left alone, if any.
+-- Returns the replacements { first, last, lines, count, place }, last paragraph first. Also returns the note of the
+-- first paragraph left alone, if any.
 function M.fill(lines, from, to, options)
 	local edits, note = {}, nil
 	for _, unit in ipairs(M.units(lines)) do
@@ -43,7 +42,7 @@ local function trim(text)
 	return trimmed
 end
 
--- columns of the indentation, with tabs of 4 as CommonMark counts them
+-- Tabs advance to the next multiple of 4, as in CommonMark.
 local function indent_width(text)
 	local width = 0
 	for char in text:match("^[ \t]*"):gmatch(".") do
@@ -52,7 +51,7 @@ local function indent_width(text)
 	return width
 end
 
--- kinsoku: characters that do not start a line, and characters that do not end one
+-- Kinsoku: characters that cannot start a line, and characters that cannot end one.
 local NO_START = chars.set(
 	"、。，．・：；？！゛゜ゝゞ々ー…‥）］｝〕〉》」』】〙〗〟’”ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ)]}"
 )
@@ -73,7 +72,6 @@ local function ends_sentence(text)
 	return all[index] == "." or all[index] == "?" or all[index] == "!"
 end
 
--- tokens that would turn into another Markdown block at the start of a line
 local function starts_block(token)
 	return token:find("^#+$")
 		or token:find("^[-*+]$")
@@ -87,7 +85,7 @@ local function starts_block(token)
 		or token:find("^%$%$")
 end
 
--- A fence at any indentation: one indented by 4 or more is code in a text paragraph, but a block of a list item.
+-- A fence at any indentation. Indented by 4 or more, it is code in a text paragraph but a block of a list item.
 local function fence(text)
 	local marks = text:match("^%s*(```+)") or text:match("^%s*(~~~+)")
 	return marks and { char = marks:sub(1, 1), length = #marks }
@@ -147,12 +145,10 @@ local function quote(text)
 	return text:find("^%s*>") ~= nil and indent_width(text) < 4
 end
 
--- a quoted line with nothing in it separates paragraphs of the quote
 local function empty_quote(text)
 	return text:find("^[%s>]+$") ~= nil and text:find(">", 1, true) ~= nil
 end
 
--- whether the line begins a block of its own, which ends the paragraph before it
 local function block_start(text)
 	return fence(text) ~= nil
 		or heading(text)
@@ -186,8 +182,8 @@ local function hard_break(lines, first, last)
 	return false
 end
 
--- the marks of a quoted line with one space after them, the text after the marks, whether the text is indented as
--- code, and how deeply the line is quoted
+-- Returns the marks of a quoted line with one space after them, the text after the marks, whether that text is
+-- indented as code, and the quote depth.
 local function quoted(text)
 	local lead = text:match("^[%s>]*>%s?") or ""
 	local depth = select(2, lead:gsub(">", ""))
@@ -246,8 +242,8 @@ local function unit_at(lines, first, count)
 	return { first = first, last = last, kind = is_quote and "quote" or "text" }
 end
 
--- Every paragraph and block of the lines, in order, as { first, last, kind, note }: kind is "text", "list" or
--- "quote" for what can be filled, and "skip" for what is left alone because of the note.
+-- Returns every paragraph and block in order as { first, last, kind, note }. kind is "text", "list" or "quote"
+-- for what can be filled. "skip" marks what is left alone, with the reason in note.
 function M.units(lines)
 	local units = {}
 	local count = #lines
@@ -292,7 +288,6 @@ function M.units(lines)
 	return units
 end
 
--- No space goes where a line break stands next to CJK text.
 local function join_bodies(bodies)
 	local parts, tail = {}, nil
 	for _, body in ipairs(bodies) do
@@ -309,7 +304,6 @@ local function join_bodies(bodies)
 	return table.concat(parts)
 end
 
--- The index of the closing backtick of the code span opened at index, nil when it never closes.
 local function code_span_end(all, index)
 	local length = 0
 	while all[index + length] == "`" do
@@ -333,8 +327,8 @@ local function code_span_end(all, index)
 	return nil
 end
 
--- Words as { text, gap, cjk }, gap being the space before the word: a run of spaces becomes one, or two where it
--- followed the end of a sentence with two. Each CJK character is a word of its own.
+-- Returns words as { text, gap, cjk }, where gap is the space before the word. A run of spaces becomes one space,
+-- or two after a sentence end that had two. Each CJK character is its own word.
 local function atoms_of(text)
 	local atoms = {}
 	local pending, current = 0, nil
@@ -344,19 +338,28 @@ local function atoms_of(text)
 			current = nil
 		end
 	end
+	local function open_atom(atom_text, is_cjk)
+		local previous = atoms[#atoms]
+		local gap = ""
+		if previous and pending > 0 then
+			gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
+		end
+		current = { text = atom_text, gap = gap, cjk = is_cjk }
+		pending = 0
+	end
 	local all = chars.split(text)
 	local index = 0
 	while index < #all do
 		index = index + 1
 		local char = all[index]
-		-- a backslash makes the punctuation after it text: an escaped backtick starts no code span
+		-- A backslash turns the next punctuation mark into plain text. An escaped backtick starts no code span.
 		if char == "\\" and all[index + 1] and all[index + 1]:find("^%p$") then
 			char = char .. all[index + 1]
 			index = index + 1
 		end
 		local span_end = char == "`" and code_span_end(all, index)
 		if char == "`" and not span_end then
-			-- backticks that close nothing are text, the whole run of them
+			-- A run of backticks that closes nothing is plain text.
 			local run_end = index
 			while all[run_end + 1] == "`" do
 				run_end = run_end + 1
@@ -365,18 +368,12 @@ local function atoms_of(text)
 			index = run_end
 		end
 		if span_end then
-			-- the text of a code span is not touched, and no line breaks in it
+			-- A code span is kept whole and never broken across lines.
 			local span = table.concat(all, "", index, span_end)
 			if current then
 				current.text = current.text .. span
 			else
-				local previous = atoms[#atoms]
-				local gap = ""
-				if previous and pending > 0 then
-					gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
-				end
-				current = { text = span, gap = gap, cjk = false }
-				pending = 0
+				open_atom(span, false)
 			end
 			index = span_end
 		elseif char == " " or char == "\t" then
@@ -386,13 +383,7 @@ local function atoms_of(text)
 			local is_cjk = cjk(char)
 			if is_cjk or not current then
 				flush()
-				local previous = atoms[#atoms]
-				local gap = ""
-				if previous and pending > 0 then
-					gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
-				end
-				current = { text = char, gap = gap, cjk = is_cjk }
-				pending = 0
+				open_atom(char, is_cjk)
 				if is_cjk then
 					flush()
 				end
@@ -427,8 +418,7 @@ local function render(list)
 	return text
 end
 
--- Breaks the words into lines of at most limit cells, the first starting with lead and the others with prefix.
--- A line that cannot be broken legally goes beyond the limit.
+-- A line with no legal break point exceeds the limit.
 local function layout(atoms, lead, prefix, limit)
 	local out, line, line_width = {}, {}, 0
 	for _, atom in ipairs(atoms) do
@@ -468,7 +458,7 @@ local function layout(atoms, lead, prefix, limit)
 	return out
 end
 
--- Returns { body_column, body } per line, then the prefixes of the first and of the other lines when filled.
+-- Returns { body_column, body } per line, then the prefix of the first filled line and of the others.
 local function split_prefixes(lines, unit, options)
 	local split, lead, prefix = {}, "", ""
 	local first = lines[1]
@@ -511,16 +501,16 @@ local function nonblank_count(text)
 	return total
 end
 
--- Fills the lines of one unit. Returns the new lines, and two functions that carry a position over: count(row, col)
--- tells how many characters that are not blanks come before a position of the old lines, and place(count) gives
--- the position after that many in the new lines.
+-- Returns the new lines and two functions that map a position across the fill. count(row, col) counts the
+-- non-blank characters before a position in the old lines. place(count) returns the position after that many
+-- non-blank characters in the new lines.
 function fill_unit(lines, unit, options)
 	local split, lead, prefix = split_prefixes(lines, unit, options)
 	local bodies = {}
 	for _, pair in ipairs(split) do
 		table.insert(bodies, pair[2])
 	end
-	-- "[ ]" of a task is no place to break
+	-- Never break inside the "[ ]" of a task.
 	local task
 	if unit.kind == "list" then
 		local box, rest = bodies[1]:match("^(%[[ xX]%])%s+(.*)$")

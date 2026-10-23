@@ -1,9 +1,9 @@
--- Characters as Normal mode's `l` moves over them: a base character with its composing characters, and emoji
--- sequences as one.
+-- Splits text into the characters `l` moves over: a base character with its composing characters, or an emoji
+-- sequence.
 local M = {}
 
--- Vim counts characters from the start of the string, so each boundary is looked up in a short window: the window
--- must hold the whole character and the code point after it, which can still join it.
+-- Vim counts characters from the start of the string. Each boundary is therefore looked up in a short window.
+-- The window must hold the whole character and the next code point, which can still join it.
 local function char_length(text, col)
 	local byte, next_byte = text:byte(col + 1, col + 2)
 	if byte < 0x80 and (not next_byte or next_byte < 0x80) then
@@ -68,7 +68,7 @@ local CJK_RANGES = {
 	{ 0x20000, 0x3FFFF },
 }
 
--- the characters Emacs breaks a line next to without a space: Han, kana, Hangul and the full-width forms
+-- Emacs breaks a line next to these characters without a space: Han, kana, Hangul and the full-width forms.
 function M.cjk(char)
 	local code = vim.fn.char2nr(char)
 	for _, range in ipairs(CJK_RANGES) do

@@ -1,7 +1,5 @@
 local M = {}
 
--- Several keys can run one command: Emacs' own aliases, the keys of the kitty keyboard protocol for what terminals
--- send otherwise, and the keypad.
 M.single = {
 	["<C-f>"] = "forward_char",
 	["<Right>"] = "forward_char",
@@ -32,7 +30,7 @@ M.single = {
 	["<kOrigin>"] = "buffer_start",
 	["<M->>"] = "buffer_end",
 	["<C-End>"] = "buffer_end",
-	-- with the kitty keyboard protocol, Option+Shift+, arrives as <M-S-,>, not <M-lt>
+	-- The kitty keyboard protocol sends Option+Shift+, as <M-S-,>, not <M-lt>.
 	["<M-S-,>"] = "buffer_start",
 	["<M-S-.>"] = "buffer_end",
 	["<M-{>"] = "backward_paragraph",
@@ -67,7 +65,7 @@ M.single = {
 	["<C-BS>"] = "backward_kill_word",
 	["<M-k>"] = "kill_sentence",
 	["<M-z>"] = "zap_to_char",
-	-- a terminal without the kitty keyboard protocol sends these as Backspace
+	-- Terminals without the kitty keyboard protocol send this as Backspace.
 	["<C-S-BS>"] = "kill_whole_line",
 	["<C-y>"] = "yank",
 	["<S-Insert>"] = "yank",
@@ -94,10 +92,11 @@ M.single = {
 	["<M-q>"] = "fill_paragraph",
 	["<C-s>"] = "search_forward",
 	["<C-r>"] = "search_backward",
-	-- terminals send CTRL-/ as CTRL-_
+	-- Terminals send CTRL-/ as CTRL-_.
 	["<C-/>"] = "undo",
 	["<C-_>"] = "undo",
-	-- C-? is DEL, which a terminal sends for Backspace and Neovim reads as <BS>; the protocol sends C-? as C-S-/
+	-- C-? is DEL. Terminals send DEL for Backspace, and Neovim reads it as <BS>.
+	-- The kitty keyboard protocol sends C-? as C-S-/.
 	["<C-?>"] = "redo",
 	["<C-S-/>"] = "redo",
 	["<C-M-_>"] = "redo",
@@ -123,7 +122,6 @@ M.shifted = {
 	["<S-PageUp>"] = "scroll_up",
 }
 
--- The second keys are stored in the form they have when read.
 local function prefix(name, label, commands)
 	local keys = {}
 	for key, command in pairs(commands) do
