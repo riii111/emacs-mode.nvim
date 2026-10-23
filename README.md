@@ -59,8 +59,9 @@ For other plugin managers, call `require("emacs-mode").setup({ start_key = "<lea
 - `C-x` and `M-g` are Emacs prefixes while active, so Insert mode's `C-x` completion is not available in the mode.
 - `C-u` kills to the start of the line, as in Readline; it is not Emacs' universal argument.
 
-For all keys, configuration options, statusline integration via `is_active()`, and
-behavior details, see **`:help emacs-mode`** or the [reference](doc/emacs-mode.txt).
+For all keys, configuration options, statusline integration via `is_active()` and the
+`EmacsModeEnter` / `EmacsModeLeave` events, hooks for scrolling and completion plugins,
+and behavior details, see **`:help emacs-mode`** or the [reference](doc/emacs-mode.txt).
 
 ## License
 
