@@ -14,7 +14,6 @@ local group = vim.api.nvim_create_augroup("emacs_mode", { clear = false })
 local namespace = vim.api.nvim_create_namespace("emacs_mode")
 
 local defaults = {
-	-- the Normal mode key that starts the mode; none by default
 	start_key = false,
 	-- C-SPC reaches Neovim as <C-@> from terminals that send it as NUL; macOS may take it for the input source
 	set_mark = { "<C-Space>", "<C-@>" },
@@ -31,7 +30,6 @@ local state = { pending = nil, active = nil }
 local key_sequence = 0
 local last_kill
 local append_next
--- the column C-n and C-p aim at, kept while they move the cursor one after another
 local vertical_goal
 local last_yank
 local last_cycle
@@ -52,7 +50,6 @@ end
 local editable, on_mode_changed, activate, restore, commands, close_completion
 local smooth_scrolling, stop_when_left
 
--- opts: start_key, set_mark, scroll_duration and aliases, as in `defaults`
 function M.setup(opts)
 	M.teardown()
 	config = vim.tbl_extend("force", defaults, opts or {})
@@ -104,8 +101,8 @@ function M.setup(opts)
 	end, namespace)
 end
 
--- Enters Insert mode at the cursor like `i`; the keys are mapped once Insert mode has started, after the
--- InsertEnter autocommands that map keys of their own (blink.cmp does).
+-- The keys are mapped once Insert mode has started, after the InsertEnter autocommands that map keys of their own
+-- (blink.cmp does).
 function M.start()
 	local buf = vim.api.nvim_get_current_buf()
 	if state.active or not editable(buf) then
@@ -161,7 +158,6 @@ local function execute(buf, name, command, shifted)
 	end
 end
 
--- shifted: the key is a move with Shift, which starts a selection
 function M.run(name, shifted)
 	local active = state.active
 	if not (active and active.buf == vim.api.nvim_get_current_buf()) then
@@ -276,7 +272,6 @@ end
 
 -- <C-g>u on both sides makes every command its own undo step without joining the text typed around it
 -- A command that reads a key would read the rest of the mapping instead, so it gets the last <C-g>u itself.
--- A command with keys of its own runs them instead.
 local function rhs(name, shifted)
 	local own_keys = commands[name].keys
 	if own_keys then
@@ -408,7 +403,6 @@ local function ours(mapping)
 	return mapping.buffer == 1 and mapping.desc == DESC
 end
 
--- Puts back the cursor and what was mapped before, unless something changed them in the meantime.
 function restore(active)
 	local cursor_shape = active.cursor
 	local scroll = package.loaded["neoscroll.scroll"]
@@ -1153,7 +1147,6 @@ commands = {
 	end, function(buf, pos)
 		return select(2, motion.blanks_around(buf, pos))
 	end),
-	-- M-SPC leaves one space, pressed again none, and again the blanks it started from
 	cycle_spacing = {
 		run = function(buf, pos)
 			local repeated = last_command

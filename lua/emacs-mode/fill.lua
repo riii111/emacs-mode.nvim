@@ -42,7 +42,7 @@ local function trim(text)
 	return trimmed
 end
 
--- columns of the indentation, with tabs of 4 as CommonMark counts them
+-- tabs of 4, as CommonMark counts them
 local function indent_width(text)
 	local width = 0
 	for char in text:match("^[ \t]*"):gmatch(".") do
@@ -72,7 +72,6 @@ local function ends_sentence(text)
 	return all[index] == "." or all[index] == "?" or all[index] == "!"
 end
 
--- tokens that would turn into another Markdown block at the start of a line
 local function starts_block(token)
 	return token:find("^#+$")
 		or token:find("^[-*+]$")
@@ -146,12 +145,10 @@ local function quote(text)
 	return text:find("^%s*>") ~= nil and indent_width(text) < 4
 end
 
--- a quoted line with nothing in it separates paragraphs of the quote
 local function empty_quote(text)
 	return text:find("^[%s>]+$") ~= nil and text:find(">", 1, true) ~= nil
 end
 
--- whether the line begins a block of its own, which ends the paragraph before it
 local function block_start(text)
 	return fence(text) ~= nil
 		or heading(text)
@@ -308,7 +305,6 @@ local function join_bodies(bodies)
 	return table.concat(parts)
 end
 
--- The index of the closing backtick of the code span opened at index, nil when it never closes.
 local function code_span_end(all, index)
 	local length = 0
 	while all[index + length] == "`" do
@@ -378,13 +374,7 @@ local function atoms_of(text)
 			if current then
 				current.text = current.text .. span
 			else
-				local previous = atoms[#atoms]
-				local gap = ""
-				if previous and pending > 0 then
-					gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
-				end
-				current = { text = span, gap = gap, cjk = false }
-				pending = 0
+				open_atom(span, false)
 			end
 			index = span_end
 		elseif char == " " or char == "\t" then
@@ -394,13 +384,7 @@ local function atoms_of(text)
 			local is_cjk = cjk(char)
 			if is_cjk or not current then
 				flush()
-				local previous = atoms[#atoms]
-				local gap = ""
-				if previous and pending > 0 then
-					gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
-				end
-				current = { text = char, gap = gap, cjk = is_cjk }
-				pending = 0
+				open_atom(char, is_cjk)
 				if is_cjk then
 					flush()
 				end
@@ -435,8 +419,7 @@ local function render(list)
 	return text
 end
 
--- Breaks the words into lines of at most limit cells, the first starting with lead and the others with prefix.
--- A line that cannot be broken legally goes beyond the limit.
+-- lead starts the first line and prefix the others. A line that cannot be broken legally goes beyond the limit.
 local function layout(atoms, lead, prefix, limit)
 	local out, line, line_width = {}, {}, 0
 	for _, atom in ipairs(atoms) do

@@ -149,9 +149,8 @@ function M.backward_paragraph(buf, pos)
 	return moved(pos, row, 0)
 end
 
--- Sentences end at 。！？ (and the full-width period) or at . ! ? before a blank or the end of the line, with
--- the closing quotes and brackets after them, as with Emacs' sentence-end-double-space off. A paragraph
--- ends its last sentence. Abbreviations such as "Mr." end a sentence too.
+-- As with Emacs' sentence-end-double-space off, . ! ? before a blank end a sentence, so abbreviations such as
+-- "Mr." end one too. A paragraph ends its last sentence.
 local ENDS = { ["。"] = true, ["！"] = true, ["？"] = true, ["．"] = true }
 local ASCII_ENDS = { ["."] = true, ["!"] = true, ["?"] = true }
 local CLOSERS = {}
@@ -255,7 +254,7 @@ function M.blanks_around(buf, pos)
 	return M.space_around(buf, pos, false)
 end
 
--- Returns { from, to }; with newlines, the blanks reach across line breaks.
+-- With newlines, the blanks reach across line breaks.
 function M.space_around(buf, pos, newlines)
 	local from_row, from_col = pos[1], pos[2]
 	while true do

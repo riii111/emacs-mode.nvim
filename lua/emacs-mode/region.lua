@@ -5,9 +5,7 @@ local M = {}
 
 M.namespace = vim.api.nvim_create_namespace("emacs_region")
 
--- buf, the extmark ids of the mark and the highlight, whether the region is active, its kind ("mark": set with
--- the mark keys; "shift": started by a shifted move, which an unshifted move ends) and the changedtick it was
--- last in step with
+-- kind: "mark" is set with the mark keys, "shift" is started by a shifted move, which an unshifted move ends
 local current
 
 local function clear_highlight()
@@ -77,7 +75,6 @@ function M.deactivate()
 	end
 end
 
--- nil when there is no selection or it is empty
 function M.bounds(buf, cursor)
 	local mark = M.is_active(buf) and M.mark(buf)
 	if not mark or (mark[1] == cursor[1] and mark[2] == cursor[2]) then

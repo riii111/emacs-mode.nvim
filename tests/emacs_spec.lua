@@ -368,7 +368,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 	session("ab|cd", "<C-Space><C-f>")
 	eq({}, vim.api.nvim_buf_get_extmarks(0, region.namespace, 0, -1, {}), "region after the mode")
 
-	-- the mark set right after typing stays: the change came before it
 	check("|", "abc<C-Space>" .. idle .. "<C-b><C-b>" .. idle .. "<C-w>", "a|", "bc")
 	local ok, err = pcall(function()
 		emacs.setup({ start_key = "e", set_mark = { "<C-Space>", "<C-Space>", "<C-g>" } })
@@ -498,7 +497,6 @@ cases["any other key ends a row of kills"] = function()
 	check("a|bc\nde", "<C-k><BS><C-k>", "|de", "\n")
 	check("a|bc\nde", "<C-k><C-/><C-k>", "a|\nde", "bc")
 	check("a|b", "<C-k><C-k><C-u>", "|", "ab")
-	-- a row does not continue in another buffer or after the mode ended
 	session("a|bc", "<C-k>")
 	check("x|y", "<C-k>", "x|", "y")
 	open("a|b")
@@ -689,7 +687,6 @@ cases["C-n and C-p move by screen lines and keep the column"] = function()
 	for i = 1, 7 do
 		table.insert(rows, T.snaps["d" .. i].screen_row - T.snaps["u" .. (8 - i)].screen_row)
 	end
-	-- the same positions as gj and gk in Normal mode, but after the last character where the line is too short
 	eq({
 		{ 1, 23 },
 		{ 2, 2 },
@@ -751,7 +748,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		"<C-v>" .. snap("down") .. "<C-v>" .. snap("down2") .. "<M-v><M-v>" .. snap("up")
 	)
 	if smooth then
-		-- neoscroll scrolls a whole window and the cursor with it
 		eq({ 11, 11, 0, 1, true }, at("down"), "C-v")
 		eq({ 21, 21, 0, 1, true }, at("down2"), "C-v again")
 	else
@@ -762,8 +758,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 	eq(1, T.snaps.up.top, "M-v")
 
 	if smooth then
-		-- the animation passes through Normal mode without ending the mode, and Esc during it ends the mode with
-		-- the cursor shape put back once neoscroll stops hiding the cursor
 		local guicursor = vim.o.guicursor
 		open(spec)
 		feed("e<C-v>" .. snap("scrolled") .. "<C-v><Esc>")
@@ -792,7 +786,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		eq(true, scrolling_then, "the mode ended only after the animation")
 		settle()
 
-		-- leaving the buffer during the animation puts the cursor shape back after neoscroll shows it again
 		open(spec)
 		feed("e<C-v><C-o>:enew<CR>")
 		table.insert(buffers, vim.api.nvim_get_current_buf())
@@ -1321,7 +1314,6 @@ cases["M-y alone asks which kill to put"] = function()
 	session("x|", "<M-y>2<CR><C-/>" .. snap("undone"))
 	eq("x", (T.snaps.undone.text:gsub("|", "")))
 
-	-- an interface that answers later puts the kill if nothing changed
 	local select = vim.ui.select
 	vim.ui.select = function(items, _, callback)
 		vim.schedule(function()
@@ -1384,7 +1376,6 @@ cases["C-x C-u and C-x C-l change the case of the region"] = function()
 	session("ab|cd", "<C-Space><C-e><C-x><C-u>" .. snap("end"))
 	local state = T.snaps["end"]
 	eq({ false, { 0, 2 } }, { state.selected, state.mark }, "selection and mark after C-x C-u")
-	-- the mark after the cursor stays at the end of the text that changed
 	session("ab|ı", "<C-Space><C-e><C-x><C-x><C-x><C-u>" .. snap("end"))
 	state = T.snaps["end"]
 	eq({ "ab|I", { 0, 3 } }, { state.text, state.mark })
@@ -1482,7 +1473,6 @@ cases["M-q breaks Japanese and English text where it is allowed"] = function()
 			width_keys(12) .. "<M-q>",
 			"|日本語の文章\nです。次の文\nです。",
 		},
-		-- kinsoku: 。 does not start a line
 		{ "|あいうえお。かきく", width_keys(10) .. "<M-q>", "|あいうえ\nお。かきく" },
 		{ "|日本語\nEnglish\nword", "<M-q>", "|日本語English word" },
 		{ "|日本語\n日本語", "<M-q>", "|日本語日本語" },
@@ -1580,7 +1570,6 @@ cases["undo and redo go through Neovim's history"] = function()
 		}, what)
 		eq(true, T.snaps.again.active, what)
 	end
-	-- with nothing to redo nothing happens, and Backspace is not redo
 	check("a|", "<C-?>", "a|")
 	check("ab|", "<BS><BS>", "|")
 end
@@ -1719,7 +1708,6 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 		"global mapping"
 	)
 	pcall(vim.keymap.del, "i", "<Down>")
-	-- an expression that calls a function of the script that mapped it
 	local script = vim.fn.tempname() .. ".vim"
 	vim.fn.writefile({
 		"function! s:Down()",
@@ -1799,7 +1787,6 @@ local function completion()
 	check("alpha alphabet\nal|\nnext", show .. "<C-p>", "al|pha alphabet\nal\nnext")
 	check("alpha alphabet\nal|", show .. "<C-y>", "alpha alphabet\nalKILL|")
 	check("alpha alphabet\nal|", show .. "<C-e>", "alpha alphabet\nal|")
-	-- a previewed item is taken back, not accepted
 	local previewed = "<Cmd>lua vim.wait(1000, function() return vim.fn.getline('.') ~= 'al' end)<CR>"
 	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. snap("preview") .. "<C-a>", "alpha alphabet\n|al")
 	assert(T.snaps.preview.text ~= "alpha alphabet\nal|", "selecting did not preview an item")
