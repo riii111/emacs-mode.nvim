@@ -1,4 +1,4 @@
--- Text changes through the buffer API, so no register, mark or 'clipboard' setting is involved.
+-- Text changes go through the buffer API. No register, mark or 'clipboard' setting is involved.
 local M = {}
 
 -- Kills are shared by all buffers and kept after the mode ends. A kill resets the yank pointer to the latest one.
@@ -26,7 +26,7 @@ function M.text(from, to)
 	return table.concat(vim.api.nvim_buf_get_text(0, from[1], from[2], to[1], to[2], {}), "\n")
 end
 
--- One change, which keeps marks at its ends where they were.
+-- A single change keeps marks at either end where they were.
 function M.splice(from, to, text)
 	from, to = ordered(from, to)
 	local lines = vim.split(text, "\n", { plain = true })
@@ -81,12 +81,12 @@ function M.to_yank()
 	return kills[pointer]
 end
 
--- the latest first
+-- Latest first.
 function M.entries()
 	return vim.list_slice(kills)
 end
 
--- index is a position in entries()
+-- index is a position in entries().
 function M.select(index)
 	if kills[index] then
 		pointer = index

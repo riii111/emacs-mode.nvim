@@ -10,7 +10,7 @@ local function last_row(buf)
 	return vim.api.nvim_buf_line_count(buf) - 1
 end
 
--- charidx()/byteidx() step over a character with its composing characters the way `l` and `h` do
+-- charidx() and byteidx() step over composing characters like `l` and `h`.
 local function next_boundary(text, col)
 	return vim.fn.byteidx(text, vim.fn.charidx(text, col) + 1)
 end
@@ -21,7 +21,7 @@ local function previous_boundary(text, col)
 	return start < col and start or vim.fn.byteidx(text, index - 1)
 end
 
--- charclass() is 2 or more for the characters 'iskeyword' (or the Unicode class of a wide character) makes a word
+-- charclass() returns 2 or more for word characters: those in 'iskeyword', and wide characters by Unicode class.
 local function is_word(text, col)
 	return vim.fn.charclass(text:sub(col + 1)) >= 2
 end
@@ -149,8 +149,8 @@ function M.backward_paragraph(buf, pos)
 	return moved(pos, row, 0)
 end
 
--- As with Emacs' sentence-end-double-space off, . ! ? before a blank end a sentence, so abbreviations such as
--- "Mr." end one too. A paragraph ends its last sentence.
+-- Like Emacs with sentence-end-double-space off, a . ! or ? followed by a blank or the end of the line ends a
+-- sentence. Abbreviations such as "Mr." end one too. A paragraph ends its last sentence.
 local ENDS = { ["。"] = true, ["！"] = true, ["？"] = true, ["．"] = true }
 local ASCII_ENDS = { ["."] = true, ["!"] = true, ["?"] = true }
 local CLOSERS = {}
@@ -312,8 +312,8 @@ function M.column_position(buf, row, column)
 	return { row, col }
 end
 
--- Emacs' goto-char: the position after n - 1 characters, which are code points, line breaks included. A
--- position inside a composed character lands before it.
+-- Like Emacs' goto-char: n is a 1-based count of code points, line breaks included. A position inside a
+-- composed character moves back before it.
 function M.char_position(buf, n)
 	local remaining = math.max(n - 1, 0)
 	local last = last_row(buf)

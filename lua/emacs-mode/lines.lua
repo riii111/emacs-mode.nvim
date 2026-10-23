@@ -1,4 +1,4 @@
--- Edits of whole lines and of the blanks between them, through the buffer API of the current buffer.
+-- Edits of whole lines and of the blanks between them, in the current buffer through the buffer API.
 -- Rows are 0-based and columns are byte columns, as in motion.lua.
 local chars = require("emacs-mode.chars")
 
@@ -19,7 +19,7 @@ end
 local OPENERS = chars.set("([{（［｛〔〈《「『【")
 local CLOSERS = chars.set(")]}）］｝〕〉》」』】")
 
--- Like Emacs' fixup-whitespace; lines next to a CJK character join without a space, as when filling.
+-- Like Emacs' fixup-whitespace. Lines next to a CJK character join without a space, as when filling.
 local function needs_space(before, after)
 	if before == "" or after == "" then
 		return false
@@ -56,7 +56,7 @@ local function padding(from, to)
 	return pad .. string.rep(" ", to - column)
 end
 
--- The rest keeps its display column.
+-- The text after the split keeps its display column on the new line.
 function M.split(pos, prefix)
 	local text = line(pos[1])
 	local col = pos[2]
@@ -113,7 +113,7 @@ function M.delete_blank(row)
 	return before
 end
 
--- Like Emacs' transpose-lines, the first line swaps with the one after it.
+-- Like Emacs' transpose-lines. A line swaps with the one before it, except the first, which swaps with the next.
 function M.transpose(row)
 	local last = last_row()
 	local first = row == 0 and 0 or row - 1

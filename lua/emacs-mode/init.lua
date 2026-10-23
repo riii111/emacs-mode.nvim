@@ -1,5 +1,5 @@
--- Emacs editing mode: Insert mode entered with a key of Normal mode, with Emacs keys mapped to its buffer
--- until Insert mode ends. Plain Insert mode and other buffers are left alone.
+-- Emacs mode is Insert mode started from Normal mode. Emacs keys are mapped in its buffer until Insert mode ends.
+-- Plain Insert mode and other buffers are unaffected.
 local motion = require("emacs-mode.motion")
 local edit = require("emacs-mode.edit")
 local region = require("emacs-mode.region")
@@ -15,18 +15,19 @@ local namespace = vim.api.nvim_create_namespace("emacs_mode")
 
 local defaults = {
 	start_key = false,
-	-- C-SPC reaches Neovim as <C-@> from terminals that send it as NUL; macOS may take it for the input source
+	-- Terminals send C-SPC as NUL, which Neovim reads as <C-@>. macOS may take C-SPC to switch the input source.
 	set_mark = { "<C-Space>", "<C-@>" },
-	-- milliseconds of neoscroll's animation for C-v, M-v and C-l, when neoscroll is loaded
+	-- Animation time in milliseconds for C-v, M-v and C-l. Used only when neoscroll is loaded.
 	scroll_duration = 100,
-	-- more keys for a command, as { command = { "<key>", ... } }, for what a terminal sends otherwise
+	-- Extra keys per command, as { command = { "<key>", ... } }, for keys the terminal sends differently.
 	aliases = {},
 }
 local config = defaults
 
--- pending: `e` was pressed and Insert mode is about to start; active: the mode is on in this buffer and window
+-- pending: the start key was pressed and Insert mode is about to begin.
+-- active: the mode is on in this buffer and window.
 local state = { pending = nil, active = nil }
--- counts the keys typed while the mode is on; a command continues the previous one only when no other key came between
+-- Counts the keys typed while the mode is on. A command continues the previous one only if no other key came between.
 local key_sequence = 0
 local last_kill
 local append_next
@@ -34,7 +35,7 @@ local vertical_goal
 local last_yank
 local last_cycle
 local last_command
--- key_sequence when the running command was typed, before it read keys of its own
+-- The value key_sequence had when the running command was typed, before it read any keys itself.
 local command_key_sequence = 0
 local spacing_cycle
 
@@ -55,7 +56,7 @@ function M.setup(opts)
 	config = vim.tbl_extend("force", defaults, opts or {})
 	local start_key = config.start_key
 	if start_key then
-		-- buffers that are not for editing text keep what the key does there
+		-- Buffers that are not for editing text keep the key's own meaning.
 		vim.keymap.set("n", start_key, function()
 			return editable(0) and "<Cmd>lua require('emacs-mode').start()<CR>" or start_key
 		end, { expr = true, desc = DESC })
@@ -69,7 +70,7 @@ function M.setup(opts)
 			end
 		end,
 	})
-	-- typed text and other changes end the selection; moves of other keys, such as the mouse, stretch it
+	-- Typed text and other changes end the selection. Cursor moves from other sources, such as the mouse, stretch it.
 	vim.api.nvim_create_autocmd("TextChangedI", {
 		group = group,
 		callback = function(args)
@@ -101,8 +102,8 @@ function M.setup(opts)
 	end, namespace)
 end
 
--- The keys are mapped once Insert mode has started, after the InsertEnter autocommands that map keys of their own
--- (blink.cmp does).
+-- Keys are mapped after Insert mode starts. InsertEnter autocommands that map keys of their own, such as
+-- blink.cmp's, have run by then.
 function M.start()
 	local buf = vim.api.nvim_get_current_buf()
 	if state.active or not editable(buf) then
@@ -117,8 +118,8 @@ function M.is_active()
 	return state.active ~= nil
 end
 
--- The keys that follow a prefix such as C-x are read here, not by mappings, so that nothing waits for 'timeoutlen'
--- and no key is lost: the mode waits for the key as long as it takes. Esc and C-g give up.
+-- Keys after a prefix such as C-x are read here, not by mappings. A mapping times out after 'timeoutlen' and can
+-- lose the key. Here the mode waits as long as it takes. Esc and C-g give up.
 local function read_prefixed(prefix)
 	notify(prefix.label .. "-")
 	vim.cmd.redraw()
@@ -165,7 +166,7 @@ function M.run(name, shifted)
 	end
 	command_key_sequence = key_sequence
 	local command = commands[name]
-	-- a command that reads keys leaves the last <C-g>u of its mapping to this function, once it has read them
+	-- A command that reads keys gets its closing <C-g>u from this function, after it has read them.
 	local reads_keys = command.reads_key
 	local ok, err = pcall(function()
 		if command.prefix then
@@ -226,15 +227,14 @@ local function in_normal_mode(mode)
 	return mode == "n" or mode == "nt" or vim.startswith(mode, "t")
 end
 
--- neoscroll animates C-v, M-v and C-l with :normal from a timer, which passes through Normal mode every step
+-- neoscroll animates C-v, M-v and C-l with :normal from a timer. Every step passes through Normal mode.
 function smooth_scrolling()
 	local scroll = package.loaded["neoscroll.scroll"]
 	return scroll ~= nil and scroll.scrolling
 end
 
--- Ends the mode if Neovim is still in Normal mode once the command that went there is over. A step of
--- neoscroll's animation comes back to Insert mode before anything scheduled runs, so Normal mode then means
--- the mode was left.
+-- Ends the mode if Neovim is still in Normal mode after the command that went there. A neoscroll step returns to
+-- Insert mode before scheduled callbacks run. Normal mode at that point means the mode was left.
 function stop_when_left(active)
 	vim.schedule(function()
 		if state.active == active and in_normal_mode(vim.api.nvim_get_mode().mode) then
@@ -264,14 +264,14 @@ function on_mode_changed()
 	if (vim.startswith(old, "i") or vim.startswith(old, "R")) and not smooth_scrolling() then
 		M.stop()
 	else
-		-- i_CTRL-O passes through niI and the modes of its command, also Normal mode for :normal, and then comes
-		-- back to Insert mode; only :stopinsert and the like stay in Normal mode
+		-- i_CTRL-O passes through niI and the modes of its command, then returns to Insert mode. :normal also passes
+		-- through Normal mode. Only :stopinsert and the like stay there.
 		stop_when_left(state.active)
 	end
 end
 
--- <C-g>u on both sides makes every command its own undo step without joining the text typed around it
--- A command that reads a key would read the rest of the mapping instead, so it gets the last <C-g>u itself.
+-- <C-g>u on both sides makes each command its own undo step, separate from the text typed around it.
+-- A command that reads a key would read the rest of the mapping. It gets the last <C-g>u from run() instead.
 local function rhs(name, shifted)
 	local own_keys = commands[name].keys
 	if own_keys then
@@ -306,7 +306,7 @@ local function pass_through(lhs, mapping)
 			vim.api.nvim_feedkeys(typed, noremap and "n" or "m", false)
 		end
 	elseif mapping and mapping.rhs and mapping.rhs ~= "" then
-		-- <SID> of the script that made the mapping, which this function is not in
+		-- Expand <SID> to the script that made the mapping, not to this one.
 		local keys_to_feed = mapping.rhs:gsub("<SID>", ("<SNR>%d_"):format(mapping.sid or 0))
 		if mapping.expr == 1 then
 			local ok, result = pcall(vim.fn.eval, keys_to_feed)
@@ -318,8 +318,8 @@ local function pass_through(lhs, mapping)
 	end
 end
 
--- The keys of `keys.completion` check for a menu first. The check is not made in an expr mapping, which would
--- run what a completion plugin maps with the text locked.
+-- The keys in keys.completion check for an open menu first. An expr mapping cannot do that check: it would run
+-- the completion plugin's own mapping with the text locked.
 function M.completion_key(key, name, shifted)
 	local lhs = "<" .. key .. ">"
 	local active = state.active
@@ -369,7 +369,7 @@ local function install(buf)
 			local options = { buffer = buf, nowait = true, silent = true, desc = DESC }
 			local keys_of_command = rhs(entry.name, entry.shifted)
 			if keys.completion[lhs] then
-				-- without the brackets, which would be read as a key
+				-- The name goes in without brackets. With them, Neovim would read it as a key.
 				keys_of_command = ("<Cmd>lua require('emacs-mode').completion_key(%q, %q, %s)<CR>"):format(
 					lhs:sub(2, -2),
 					entry.name,
@@ -409,7 +409,7 @@ function restore(active)
 	if cursor_shape and vim.o.guicursor == cursor_shape.set then
 		vim.o.guicursor = cursor_shape.saved
 	elseif cursor_shape and scroll and scroll.scrolling and scroll.guicursor == cursor_shape.set then
-		-- neoscroll hides the cursor while it scrolls and puts back what it saved when it is done
+		-- neoscroll hides the cursor while scrolling and restores its saved guicursor when done. Replace that saved value.
 		scroll.guicursor = cursor_shape.saved
 	end
 	if active.unwrapped and vim.api.nvim_win_is_valid(active.win) and not vim.wo[active.win].wrap then
@@ -433,7 +433,7 @@ end
 
 function close_completion()
 	if package.loaded["blink.cmp"] then
-		-- blink.cmp's own cancel() is deferred and would undo the preview after this command has edited the text
+		-- blink.cmp's cancel() is deferred. It would undo the preview after this command has edited the text.
 		pcall(function()
 			if require("blink.cmp").is_visible() then
 				require("blink.cmp.completion.list").undo_preview()
@@ -451,7 +451,7 @@ local CANCELLED = "\1"
 local function ask(prompt, default)
 	local pos = cursor()
 	local ok, answer = pcall(vim.fn.input, { prompt = prompt, default = default or "", cancelreturn = CANCELLED })
-	-- some configurations leave the cursor pulled back from the end of the line after a prompt
+	-- Some configurations pull the cursor back from the end of the line after a prompt.
 	if not vim.deep_equal(cursor(), pos) then
 		edit.set_cursor(pos)
 	end
@@ -528,13 +528,13 @@ local function remember_kill(buf)
 	last_kill = { buf = buf, tick = vim.b.changedtick, pos = cursor(), key_sequence = key_sequence }
 end
 
--- target can return true or false as well to tell whether the kill goes in front, which Emacs decides the other way
--- round for a region.
+-- target may also return true or false: whether the kill goes in front of the previous one. Emacs decides that the
+-- other way round for a region.
 local function killing(target)
 	return {
 		kind = "kill",
 		run = function(buf, pos)
-			-- before target(), which may read a key of its own (M-z)
+			-- This check comes before target(), which may read a key of its own (M-z).
 			local continued = kill_continues(buf, pos)
 			local to, in_front = target(buf, pos)
 			if to then
@@ -551,9 +551,9 @@ local function killing(target)
 	}
 end
 
--- Runs a Normal mode command from Insert mode and returns 'curswant'. Normal mode commands cannot put the cursor
--- after the last character without 'virtualedit'. Setting it recomputes 'curswant', so prepare() runs after it
--- is set and 'curswant' is read before it is restored.
+-- Runs a Normal mode command from Insert mode and returns 'curswant'. Without 'virtualedit', a Normal mode command
+-- cannot put the cursor after the last character. Setting it recomputes 'curswant'. Therefore prepare() runs after
+-- it is set, and 'curswant' is read before it is restored.
 local function normal(keys_to_press, prepare)
 	local win = vim.api.nvim_get_current_win()
 	local virtualedit = vim.api.nvim_get_option_value("virtualedit", { scope = "local", win = win })
@@ -564,7 +564,7 @@ local function normal(keys_to_press, prepare)
 	if prepare then
 		prepare()
 	end
-	-- without autocommands, Normal mode here is not taken for the end of Insert mode
+	-- Autocommands are off. Otherwise the switch to Normal mode here would end the mode.
 	local ok, err = pcall(vim.api.nvim_cmd, {
 		cmd = "normal",
 		args = { vim.keycode(keys_to_press) },
@@ -577,8 +577,8 @@ local function normal(keys_to_press, prepare)
 	return curswant
 end
 
--- gj and gk keep the target column in 'curswant', which Insert mode resets after every command. A goal column
--- set with C-x C-n is the target instead.
+-- Insert mode resets 'curswant' after every command, so a run of gj and gk restores its target column from
+-- vertical_goal. A goal column set with C-x C-n takes precedence.
 local function screen_line(direction)
 	return {
 		kind = "vertical",
@@ -637,7 +637,7 @@ local function converting(convert)
 	}
 end
 
--- As in Emacs, the mark counts also when the selection was dropped.
+-- As in Emacs, the mark is used even after the selection was dropped.
 local function converting_region(convert)
 	return {
 		run = function(buf, pos)
@@ -653,7 +653,7 @@ local function converting_region(convert)
 				return
 			end
 			local after = edit.splice(from, to, converted)
-			-- the mark stays before text put at it, so one at the end of the text goes to the start
+			-- A mark at the end of the replaced text would move to its start. Put it after the new text.
 			if vim.deep_equal(mark, to) then
 				region.move_mark(buf, after)
 			end
@@ -672,7 +672,7 @@ local function smooth(keys_to_press, animate)
 	end
 end
 
--- With a goal column set, the cursor goes to it after the scroll, which is not animated then: neoscroll scrolls
+-- With a goal column set, scroll without animation and move the cursor to the goal column. neoscroll would scroll
 -- later, from a timer.
 local function paging(keys_to_press, animate)
 	local scroll = smooth(keys_to_press, animate)
@@ -699,8 +699,8 @@ local function recenter(keys_to_press)
 	end)
 end
 
--- Scrolls the text sideways by the width of the window less 2, as Emacs does. Lines that wrap cannot scroll, so
--- wrapping is turned off for the window until the text is back at the left or the mode ends.
+-- Scrolls sideways by the window width less 2, like Emacs. Wrapped lines cannot scroll sideways. Wrapping is turned
+-- off for the window until the text is back at the left or the mode ends.
 local function scrolling_sideways(keys_to_press)
 	return {
 		keeps_region = true,
@@ -735,7 +735,7 @@ end
 local function fill_rows(buf, pos)
 	local first, last = region.bounds(buf, pos)
 	if first then
-		-- a selection that ends at the start of a line does not take that line
+		-- A selection ending at the start of a line excludes that line.
 		return first[1], (last[2] == 0 and last[1] > first[1]) and last[1] - 1 or last[1]
 	end
 	local total = vim.api.nvim_buf_line_count(buf)
@@ -759,7 +759,7 @@ local function fill_paragraphs(buf, pos)
 		end
 		return
 	end
-	-- the cursor stays at the same place of the text, which moves with the lines the paragraphs above it gain
+	-- Keep the cursor at the same place in the text. Paragraphs above it may gain or lose lines.
 	local target, count
 	for _, change in ipairs(edits) do
 		if pos[1] >= change.first and pos[1] <= change.last then
@@ -794,7 +794,7 @@ local function preview(text)
 	return shown
 end
 
--- The prompt of vim.ui.select() may be answered later, so fn runs only if buf is still as it was.
+-- A vim.ui.select() prompt may be answered later. Run fn only if buf is unchanged by then.
 local function if_unchanged(buf, win, tick, fn)
 	if
 		not (vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf)
@@ -824,7 +824,7 @@ local function choose_kill(buf, pos)
 	}, function(item)
 		if_unchanged(buf, win, tick, function()
 			if not item then
-				-- some configurations leave the cursor pulled back from the end of the line after a prompt
+				-- Some configurations pull the cursor back from the end of the line after a prompt.
 				edit.set_cursor(pos)
 				return
 			end
@@ -874,7 +874,7 @@ commands = {
 	backward_sentence = moving(motion.backward_sentence),
 	forward_sentence = moving(motion.forward_sentence),
 	back_to_indentation = moving(motion.back_to_indentation),
-	-- the prompts of the commands below are read with the keys of their own, so they read keys as well
+	-- These commands read keys for their prompts.
 	goto_prefix = { reads_key = true, prefix = keys.prefixes["<M-g>"] },
 	ctl_x = { reads_key = true, prefix = keys.prefixes["<C-x>"] },
 	goto_line = {
@@ -937,7 +937,7 @@ commands = {
 	kill_word = killing(motion.forward_word),
 	backward_kill_word = killing(motion.backward_word),
 	backward_kill_sentence = killing(motion.backward_sentence),
-	-- the line with its line break, joined to the kill before as the parts before and after the cursor
+	-- A continued kill gets the part before the cursor prepended and the part after it appended.
 	kill_whole_line = {
 		kind = "kill",
 		run = function(buf, pos)
@@ -1028,7 +1028,7 @@ commands = {
 			end
 		end,
 	},
-	-- without a selection, C-w kills the word before the cursor as in Readline and Vim
+	-- Without a selection, C-w kills the word before the cursor, as in Readline and Vim.
 	kill_region = killing(function(buf, pos)
 		if region.is_active(buf) then
 			local mark = region.mark(buf)
@@ -1047,7 +1047,7 @@ commands = {
 			end
 		end,
 	},
-	-- ends the selection and nothing else; the mark stays
+	-- Only ends the selection. The mark stays.
 	keyboard_quit = { run = function() end },
 	mark_paragraph = {
 		keeps_region = true,
@@ -1114,8 +1114,8 @@ commands = {
 	},
 	transpose_words = {
 		run = function(buf, pos)
-			-- backward_word stops at the start of the buffer even before blanks or punctuation, so the start of the
-			-- first word is found back from its end
+			-- backward_word stops at the start of the buffer even before blanks or punctuation. Find the start of the first
+			-- word from its end instead.
 			local end1 = motion.forward_word(buf, motion.backward_word(buf, pos) or pos)
 			local start1 = end1 and motion.backward_word(buf, end1)
 			local end2 = end1 and motion.forward_word(buf, end1)
@@ -1215,7 +1215,7 @@ commands = {
 		{ reads_key = true }
 	),
 	kill_sentence = killing(motion.forward_sentence),
-	-- Vim's search from i_CTRL-O shows the matches while typing and comes back to the mode at the match
+	-- Vim's search from i_CTRL-O shows matches while typing and returns to the mode at the match.
 	search_forward = { keys = "<C-o>/" },
 	search_backward = { keys = "<C-o>?" },
 	undo = {
