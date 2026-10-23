@@ -1,8 +1,7 @@
 -- Integration tests. Keys go through the real mappings. Each case types its keys in one feedkeys() call, records
 -- the state along the way with <Cmd> and leaves with <Esc>.
 --
--- `make test` runs them without other plugins. To test with blink.cmp or neoscroll, run dofile("<this file>")()
--- inside a Neovim that has them.
+-- `make test` runs them without other plugins.
 local emacs = require("emacs-mode")
 local edit = require("emacs-mode.edit")
 local region = require("emacs-mode.region")
@@ -57,16 +56,7 @@ local function highlighted()
 	end
 end
 
-local function settle()
-	if package.loaded["neoscroll.scroll"] then
-		vim.wait(2000, function()
-			return not require("neoscroll.scroll").scrolling
-		end, 5)
-	end
-end
-
 function T.snap(label)
-	settle()
 	T.snaps[label] = {
 		text = render(),
 		mode = vim.fn.mode(),
@@ -159,16 +149,32 @@ cases["e starts the mode at the cursor and Esc or CTRL-C ends it"] = function()
 	check("|ab", "e", "e|ab")
 end
 
-cases["the cursor is a block while the mode is on"] = function()
-	local guicursor = vim.o.guicursor
-	open("ab|c")
-	feed("e<Cmd>lua emacs_test.guicursor = vim.o.guicursor<CR><Esc>")
-	eq(guicursor .. ",i-ci:block", T.guicursor, "'guicursor' in the mode")
-	eq(guicursor, vim.o.guicursor, "'guicursor' after the mode")
+cases["EmacsModeEnter and EmacsModeLeave follow the mode"] = function()
+	local seen = {}
+	local id = vim.api.nvim_create_autocmd("User", {
+		pattern = { "EmacsModeEnter", "EmacsModeLeave" },
+		callback = function(args)
+			table.insert(seen, { args.match, emacs.is_active() })
+		end,
+	})
+	local ok, err = pcall(function()
+		open("ab|c")
+		feed("e<Esc>")
+		eq({ { "EmacsModeEnter", true }, { "EmacsModeLeave", false } }, seen, "start and Esc")
 
-	feed("e<Cmd>set guicursor=a:hor20<CR><Esc>")
-	eq("a:hor20", vim.o.guicursor)
-	vim.o.guicursor = guicursor
+		seen = {}
+		open("ab|c")
+		feed("e<Cmd>lua require('emacs-mode').stop()<CR><Cmd>lua require('emacs-mode').stop()<CR><Esc>")
+		eq({ { "EmacsModeEnter", true }, { "EmacsModeLeave", false } }, seen, "stop() twice")
+
+		seen = {}
+		open("ab|c")
+		feed("e<C-o>:enew<CR><Esc>")
+		table.insert(buffers, vim.api.nvim_get_current_buf())
+		eq({ { "EmacsModeEnter", true }, { "EmacsModeLeave", false } }, seen, "leaving the buffer")
+	end)
+	vim.api.nvim_del_autocmd(id)
+	assert(ok, err)
 end
 
 cases["start_key picks the key that starts the mode, and none is mapped without it"] = function()
@@ -731,8 +737,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		lines[i] = "line " .. i
 	end
 	local spec = table.concat(lines, "\n"):gsub("line 50", "lin|e 50", 1)
-	-- A full configuration lazy-loads neoscroll. It animates these keys.
-	local smooth = pcall(require, "neoscroll")
 	local function at(label)
 		local snapshot = T.snaps[label]
 		return { snapshot.top, snapshot.pos[1], snapshot.pos[2], snapshot.screen_row, snapshot.active }
@@ -742,55 +746,9 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		"|" .. table.concat(lines, "\n"),
 		"<C-v>" .. snap("down") .. "<C-v>" .. snap("down2") .. "<M-v><M-v>" .. snap("up")
 	)
-	if smooth then
-		eq({ 11, 11, 0, 1, true }, at("down"), "C-v")
-		eq({ 21, 21, 0, 1, true }, at("down2"), "C-v again")
-	else
-		eq({ 9, 9, 0, 1, true }, at("down"), "C-v")
-		eq({ 17, 17, 0, 1, true }, at("down2"), "C-v again")
-	end
+	eq({ 9, 9, 0, 1, true }, at("down"), "C-v")
+	eq({ 17, 17, 0, 1, true }, at("down2"), "C-v again")
 	eq(1, T.snaps.up.top, "M-v")
-
-	if smooth then
-		local guicursor = vim.o.guicursor
-		open(spec)
-		feed("e<C-v>" .. snap("scrolled") .. "<C-v><Esc>")
-		eq(true, T.snaps.scrolled.active, "the mode after C-v")
-		assert(
-			vim.wait(2000, function()
-				return not emacs.is_active()
-			end, 5),
-			"the mode stays on after Esc during the animation"
-		)
-		settle()
-		eq({ guicursor, {} }, { vim.o.guicursor, buffer_maps(0) }, "after Esc during the animation")
-
-		-- The mode ends right after Esc, before the animation is over. Insert mode entered again during the animation must
-		-- be plain Insert mode.
-		open(spec)
-		feed("e<C-v><Esc>")
-		local scrolling_then
-		assert(
-			vim.wait(2000, function()
-				scrolling_then = require("neoscroll.scroll").scrolling
-				return not emacs.is_active()
-			end, 1),
-			"the mode stays on after Esc during the animation"
-		)
-		eq(true, scrolling_then, "the mode ended only after the animation")
-		settle()
-
-		open(spec)
-		feed("e<C-v><C-o>:enew<CR>")
-		table.insert(buffers, vim.api.nvim_get_current_buf())
-		settle()
-		feed("<Esc>")
-		eq(
-			{ false, guicursor },
-			{ emacs.is_active(), vim.o.guicursor },
-			"after leaving the buffer during the animation"
-		)
-	end
 
 	-- Records the state after every command. A snapshot taken between commands would add a key that ends the cycle.
 	local function after_each(input)
@@ -912,7 +870,7 @@ cases["mappings of the buffer come back as they were"] = function()
 		end
 		return found
 	end
-	-- Plugins may map keys of their own on the first InsertEnter of a buffer, as blink.cmp does.
+	-- Plugins may map keys of their own on the first InsertEnter of a buffer, as completion plugins do.
 	feed("i<Esc>")
 	local before = maps()
 	vim.api.nvim_buf_set_lines(0, 0, -1, true, { "abc" })
@@ -1656,10 +1614,6 @@ cases["Page keys scroll like C-v and M-v, with or without Shift"] = function()
 end
 
 cases["Up and Down keep the mappings they had on an open completion menu"] = function()
-	-- blink.cmp maps Down itself in each buffer and would replace the mapping this case sets.
-	if package.loaded["blink.cmp"] then
-		return
-	end
 	local counted = 0
 	_G.emacs_test_down = function()
 		counted = counted + 1
@@ -1675,6 +1629,8 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 	local function run(prepare)
 		counted = 0
 		open("x\ny|")
+		feed("i<Esc>")
+		pcall(vim.keymap.del, "i", "<Down>", { buffer = true })
 		prepare()
 		feed("e" .. menu .. "<Down><Esc>")
 		return counted
@@ -1722,6 +1678,7 @@ cases["Up and Down keep the mappings they had on an open completion menu"] = fun
 	vim.fn.delete(script)
 	counted = 0
 	open("x\ny|")
+	feed("i<Esc>")
 	vim.keymap.set("i", "<Down>", _G.emacs_test_down, { buffer = true })
 	feed("e<Up><Esc>")
 	eq({ 0, 0 }, { counted, vim.api.nvim_win_get_cursor(0)[1] - 1 }, "Up without a menu")
@@ -1764,51 +1721,236 @@ cases["new commands are undone one at a time"] = function()
 	end
 end
 
-local function completion()
-	local cmp = require("blink.cmp")
-	local function menu()
-		return "<Cmd>lua assert(vim.wait(5000, require('blink.cmp').is_menu_visible), 'no menu')<CR>"
+cases["a scroll hook may animate with Normal mode commands from a timer"] = function()
+	vim.cmd.new()
+	vim.cmd.resize(10)
+	vim.wo.scrolloff = 0
+	vim.wo.wrap = false
+	local lines = {}
+	for i = 1, 100 do
+		lines[i] = "line " .. i
 	end
-	_G.emacs_test_show = function()
-		require("blink.cmp").show()
+	local spec = "|" .. table.concat(lines, "\n")
+
+	local calls, left = {}, 0
+	local claims = true
+	local function step()
+		if left > 0 then
+			vim.cmd.normal({ args = { vim.keycode("<C-e>") }, bang = true })
+			left = left - 1
+			vim.defer_fn(step, 10)
+		end
 	end
-	local show = "<Cmd>lua emacs_test_show()<CR>" .. menu()
-	edit.store("KILL", "replace")
+	T.settle = function()
+		vim.wait(2000, function()
+			return left == 0
+		end, 5)
+	end
+	local settle = "<Cmd>lua emacs_test.settle()<CR>"
+	emacs.setup({
+		start_key = "e",
+		scroll = {
+			run = function(keys)
+				table.insert(calls, keys)
+				if claims then
+					left = 8
+					vim.defer_fn(step, 10)
+				end
+				return claims
+			end,
+			busy = function()
+				return left > 0
+			end,
+		},
+	})
+	local ok, err = pcall(function()
+		session(spec, "<C-v>" .. snap("started") .. settle .. snap("down"))
+		eq({ "<C-f>" }, calls, "keys given to the hook")
+		eq({ 9, 9, true }, { T.snaps.down.top, T.snaps.down.pos[1], T.snaps.down.active }, "after the animation")
+		eq({}, buffer_maps(0), "mappings left")
 
-	check("alpha alphabet\nal|\nnext", show .. "<C-n>", "alpha alphabet\nal\nne|xt")
-	eq(false, cmp.is_menu_visible(), "menu after C-n")
-	check("alpha alphabet\nal|\nnext", show .. "<C-p>", "al|pha alphabet\nal\nnext")
-	check("alpha alphabet\nal|", show .. "<C-y>", "alpha alphabet\nalKILL|")
-	check("alpha alphabet\nal|", show .. "<C-e>", "alpha alphabet\nal|")
-	local previewed = "<Cmd>lua vim.wait(1000, function() return vim.fn.getline('.') ~= 'al' end)<CR>"
-	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. snap("preview") .. "<C-a>", "alpha alphabet\n|al")
-	assert(T.snaps.preview.text ~= "alpha alphabet\nal|", "selecting did not preview an item")
-	check("alpha alphabet\nal|", show .. "<Down>" .. previewed .. "<C-k>", "alpha alphabet\nal|", "KILL")
-	session(
-		"alpha alphabet\nal|",
-		show .. "<Down>" .. previewed .. snap("down") .. "<Up>" .. "<Cmd>lua vim.wait(200)<CR>" .. snap("up")
-	)
-	assert(T.snaps.up.text ~= T.snaps.down.text, "Up did not choose another item than Down: " .. T.snaps.up.text)
-	check("alpha alphabet\nal|", show .. "<S-Right>", "alpha alphabet\nal|")
+		open(spec)
+		feed("e<C-v><Esc>")
+		local animating
+		assert(
+			vim.wait(2000, function()
+				animating = left > 0
+				return not emacs.is_active()
+			end, 1),
+			"the mode stays on after Esc during the animation"
+		)
+		eq(true, animating, "the mode ended before the animation did")
+		T.settle()
+		eq({}, buffer_maps(0), "mappings left after Esc during the animation")
 
-	open("alpha alphabet\nal|")
-	local accepted = "<Cmd>lua vim.wait(1000, function() return not require('blink.cmp').is_menu_visible() end)<CR>"
-	feed("A" .. show .. "<C-n>" .. previewed .. "<C-y>" .. accepted .. "<Esc>")
-	assert(vim.fn.getline(2):find("^alpha"), "plain C-n and C-y accepted " .. vim.fn.getline(2))
-	eq("blink.cmp", vim.fn.maparg("<C-n>", "i", false, true).desc)
+		open(spec)
+		feed("e<C-v><C-o>:enew<CR>")
+		table.insert(buffers, vim.api.nvim_get_current_buf())
+		T.settle()
+		feed("<Esc>")
+		eq(false, emacs.is_active(), "after leaving the buffer during the animation")
+
+		calls = {}
+		session(spec, "<C-f><C-f><C-x><C-n><C-v>" .. settle .. snap("goal"))
+		eq({}, calls, "a page scroll with a goal column")
+
+		claims = false
+		calls = {}
+		session((spec:gsub("|", ""):gsub("line 50", "lin|e 50", 1)), "<C-l><C-l><C-l><C-l>" .. snap("end"))
+		eq({ "zz", "zt", "zb", "zz" }, calls, "keys of C-l given to the hook")
+		eq(5, T.snaps["end"].screen_row, "C-l done by the mode when the hook declines")
+	end)
+	emacs.setup(OPTS)
+	T.settle = nil
+	vim.cmd.close()
+	assert(ok, err)
+end
+
+cases["completion hooks keep the menu's keys and close it before a command"] = function()
+	local shown, closed_at, downs = false, {}, 0
+	_G.emacs_test_down = function()
+		downs = downs + 1
+		return ""
+	end
+	T.show = function(on)
+		shown = on
+	end
+	emacs.setup({
+		start_key = "e",
+		completion = {
+			visible = function()
+				return shown
+			end,
+			close = function()
+				table.insert(closed_at, text())
+				shown = false
+			end,
+		},
+	})
+	local ok, err = pcall(function()
+		local menu = "<Cmd>lua emacs_test.show(true)<CR>"
+		local function prepare()
+			open("ab|c")
+			feed("i<Esc>")
+			vim.api.nvim_win_set_cursor(0, { 1, 2 })
+			vim.keymap.set("i", "<Down>", _G.emacs_test_down, { buffer = true })
+		end
+		prepare()
+		feed("e" .. menu .. "<Down><Esc>")
+		eq({ 1, {} }, { downs, closed_at }, "Down on an open menu")
+
+		shown = false
+		prepare()
+		feed("e" .. menu .. "<C-k>" .. snap("killed") .. "<Down><Esc>")
+		eq({ "ab|", { "abc" }, false }, { T.snaps.killed.text, closed_at, shown }, "C-k on an open menu")
+		eq(1, downs, "Down without a menu")
+	end)
+	emacs.setup(OPTS)
+	_G.emacs_test_down, T.show = nil, nil
+	assert(ok, err)
+end
+
+cases["start_key puts the mapping it replaced back"] = function()
+	local function global(lhs)
+		local raw = vim.keycode(lhs)
+		for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
+			if mapping.lhsraw == raw or mapping.lhsrawalt == raw then
+				return mapping
+			end
+		end
+	end
+	local function shape(mapping)
+		return mapping
+			and {
+				callback = mapping.callback,
+				rhs = mapping.rhs,
+				desc = mapping.desc,
+				expr = mapping.expr,
+				noremap = mapping.noremap,
+				nowait = mapping.nowait,
+				silent = mapping.silent,
+				replace_keycodes = mapping.replace_keycodes,
+			}
+	end
+	local function original() end
+	local function newer() end
+	emacs.teardown()
+	local ok, err = pcall(function()
+		vim.keymap.set("n", "e", original, { expr = true, nowait = true, silent = true, desc = "mine" })
+		local before = shape(global("e"))
+
+		emacs.setup({ start_key = "e" })
+		eq("Emacs mode", global("e").desc, "the mode's mapping")
+		emacs.setup({ start_key = "e" })
+		emacs.setup({ start_key = "e" })
+		emacs.teardown()
+		eq(before, shape(global("e")), "after three setups and a teardown")
+		emacs.teardown()
+		eq(before, shape(global("e")), "after a second teardown")
+
+		emacs.setup({ start_key = "e" })
+		emacs.setup({})
+		eq(before, shape(global("e")), "after setup without start_key")
+
+		emacs.setup({ start_key = "e" })
+		vim.keymap.set("n", "e", newer, { desc = "newer" })
+		emacs.teardown()
+		eq({ "newer", newer }, { global("e").desc, global("e").callback }, "a mapping set after setup")
+
+		emacs.setup({ start_key = "e" })
+		vim.keymap.del("n", "e")
+		emacs.teardown()
+		eq(nil, global("e"), "a mapping removed after setup")
+
+		vim.cmd("map <silent> e FOO")
+		emacs.setup({ start_key = "e" })
+		emacs.teardown()
+		eq(
+			{ "FOO", "FOO", "FOO", 1 },
+			{ vim.fn.maparg("e", "n"), vim.fn.maparg("e", "v"), vim.fn.maparg("e", "o"), global("e").silent },
+			"a mapping of several modes"
+		)
+		vim.keymap.del({ "n", "v", "o" }, "e")
+
+		vim.keymap.set("n", "e", newer, { desc = "Emacs mode" })
+		emacs.setup({ start_key = "e" })
+		emacs.teardown()
+		eq(nil, global("e"), "a mapping left by an earlier load of the module")
+
+		vim.keymap.set("n", "e", original)
+		emacs.setup({ start_key = "<F2>" })
+		eq({ "Emacs mode", original }, { global("<F2>").desc, global("e").callback }, "another start_key")
+		emacs.setup({ start_key = "e" })
+		eq(nil, global("<F2>"), "<F2> after start_key changed")
+		emacs.teardown()
+		eq(original, global("e").callback, "e after teardown")
+		vim.keymap.del("n", "e")
+
+		for _, key in ipairs({ "<C-i>", "<C-m>", "<C-@>" }) do
+			vim.keymap.set("n", key, original, { desc = "mine" })
+			emacs.setup({ start_key = key })
+			emacs.setup({ start_key = "e" })
+			eq({ "mine", original }, { global(key).desc, global(key).callback }, key .. " after start_key changed")
+			emacs.teardown()
+			vim.keymap.del("n", key)
+		end
+
+		open("foo| bar")
+		vim.keymap.set("n", "e", "x", { buffer = true })
+		emacs.setup({ start_key = "e" })
+		feed("e")
+		eq({ "n", false, "foo|bar" }, { vim.fn.mode(), emacs.is_active(), render() }, "a mapping of the buffer wins")
+		vim.keymap.del("n", "e", { buffer = true })
+	end)
+	pcall(vim.keymap.del, "n", "e")
+	pcall(vim.keymap.del, "n", "<F2>")
+	emacs.setup(OPTS)
+	assert(ok, err)
 end
 
 -- opts.exit: quit Neovim afterwards, with exit status 1 when a case failed
 return function(opts)
-	if vim.fn.maparg("e", "n", false, true).desc ~= "Emacs mode" then
-		emacs.setup(OPTS)
-	end
-	local skipped = {}
-	if package.loaded["blink.cmp"] then
-		cases["completion menus do not take the mode's keys"] = completion
-	else
-		table.insert(skipped, "completion (no blink.cmp)")
-	end
+	emacs.setup(OPTS)
 	vim.cmd.tabnew()
 	local tab = vim.api.nvim_get_current_tabpage()
 	local failed = {}
@@ -1829,7 +1971,6 @@ return function(opts)
 	end
 	local report = #failed .. " Emacs mode case(s) failed:\n" .. table.concat(failed, "\n\n")
 	local summary = ("Emacs mode: %d cases OK"):format(#names)
-		.. (#skipped > 0 and "; skipped " .. table.concat(skipped, ", ") or "")
 	if opts and opts.exit then
 		io.stderr:write((#failed > 0 and report or summary) .. "\n")
 		vim.cmd(#failed > 0 and "cquit 1" or "qall!")

@@ -6,11 +6,12 @@ CONTENTS                                                  *emacs-mode-contents*
   1. Introduction ........................... |emacs-mode-introduction|
   2. Setup .................................. |emacs-mode-setup|
   3. Lua API ................................ |emacs-mode-api|
-  4. Keys ................................... |emacs-mode-keys|
-  5. Commands ............................... |emacs-mode-commands|
-  6. Status of Emacs' keys .................. |emacs-mode-status|
-  7. Terminals .............................. |emacs-mode-terminals|
-  8. Behavior ............................... |emacs-mode-behavior|
+  4. Events and hooks ....................... |emacs-mode-hooks|
+  5. Keys ................................... |emacs-mode-keys|
+  6. Commands ............................... |emacs-mode-commands|
+  7. Status of Emacs' keys .................. |emacs-mode-status|
+  8. Terminals .............................. |emacs-mode-terminals|
+  9. Behavior ............................... |emacs-mode-behavior|
 
 ==============================================================================
 1. INTRODUCTION                                       *emacs-mode-introduction*
@@ -32,26 +33,29 @@ Requires Neovim 0.12 or later.
     require("emacs-mode").setup({
       start_key = "e",
       set_mark = { "<C-Space>", "<C-@>" },
-      scroll_duration = 100,
       aliases = {},
+      scroll = {},
+      completion = {},
     })
 <
                                                        *emacs-mode-start_key*
 start_key ~
     The Normal mode key that starts the mode, or `false` (the default) to map
     none. In buffers that are not for editing text (a 'buftype' other than
-    empty, or 'nomodifiable') the key does what it did before. With "e", the
-    |e| motion of Visual and Operator-pending mode stays.
+    empty, or 'nomodifiable') the key does what Vim does without the mapping.
+    With "e", the |e| motion of Visual and Operator-pending mode stays.
+
+    The mapping is global and in Normal mode. A Normal mode mapping of the
+    same key in a buffer takes precedence in that buffer. The global mapping
+    the key had is saved and put back, with its attributes, when setup() runs
+    again or teardown() is called, unless something replaced the mode's
+    mapping in the meantime: then that newer mapping stays. While the mode's
+    mapping is in place, the saved one does not run.
 
                                                         *emacs-mode-set_mark*
 set_mark ~
     The keys that set the mark. Terminals send CTRL-SPACE as CTRL-@, and macOS
     may use CTRL-SPACE to switch the input source.
-
-                                                 *emacs-mode-scroll_duration*
-scroll_duration ~
-    Milliseconds of neoscroll's animation for CTRL-V, ALT-V and CTRL-L when
-    neoscroll.nvim is loaded.
 
                                                           *emacs-mode-aliases*
 aliases ~
@@ -60,6 +64,14 @@ aliases ~
     cannot be told from another key (|emacs-mode-terminals|): >lua
         aliases = { kill_whole_line = { "<F7>" }, redo = { "<F8>" } }
 <
+                                                         *emacs-mode-scroll*
+scroll ~
+    A table of functions for a scrolling plugin, see |emacs-mode-hooks|.
+
+                                                       *emacs-mode-completion*
+completion ~
+    A table of functions for a completion plugin, see |emacs-mode-hooks|.
+
 Calling setup() again ends the mode and replaces the earlier setup.
 
 ==============================================================================
@@ -77,10 +89,60 @@ is_active()                                          *emacs-mode.is_active()*
     Whether the mode is on, for a statusline.
 
 teardown()                                            *emacs-mode.teardown()*
-    Ends the mode and removes the start key and the autocommands.
+    Ends the mode and removes the start key and the autocommands. The mapping
+    the start key had is put back, see |emacs-mode-start_key|.
 
 ==============================================================================
-4. KEYS                                                       *emacs-mode-keys*
+4. EVENTS AND HOOKS                                          *emacs-mode-hooks*
+
+Events ~
+                                                          *EmacsModeEnter*
+EmacsModeEnter          A |User| event, after the mode has started.
+                                                          *EmacsModeLeave*
+EmacsModeLeave          A |User| event, after the mode has ended and its
+                        mappings are gone, whichever way it ended.
+
+For example, a statusline that shows |emacs-mode.is_active()| needs to be
+redrawn when the mode starts and ends: >lua
+    vim.api.nvim_create_autocmd("User", {
+      pattern = { "EmacsModeEnter", "EmacsModeLeave" },
+      command = "redrawstatus",
+    })
+<
+Hooks ~
+The options `scroll` and `completion` of |emacs-mode-setup| connect a plugin
+that scrolls the window or shows a completion menu of its own. The mode asks
+them when it needs to, and does nothing special without them.
+
+scroll.run({keys})                                     *emacs-mode-scroll.run*
+    Called for the scrolls of CTRL-V, ALT-V and CTRL-L and given the Normal
+    mode keys that the mode would run for them: "<C-f>", "<C-b>", "zz", "zt"
+    or "zb". Return true after scrolling by other means. With false or no
+    hook, the mode runs the keys itself. It does not call the hook for a page
+    scroll with a goal column set.
+
+scroll.busy()                                         *emacs-mode-scroll.busy*
+    Return true while scroll.run() still has scrolling to do. A scroll that
+    runs |:normal| commands from a timer passes through Normal mode, which
+    would end the mode. While busy() returns true, the mode ends only if
+    Neovim is still in Normal mode after the pending callbacks have run. Esc
+    then ends the mode a moment late, and Insert mode entered again before
+    that keeps the mode on.
+
+completion.visible()                           *emacs-mode-completion.visible*
+    Return true while the completion menu of the plugin is open. The menu of
+    Neovim itself (|pumvisible()|) is always taken into account. While a menu
+    is open, <Up>, <Down>, <PageUp> and <PageDown> run the mapping they had
+    before the mode started.
+
+completion.close()                               *emacs-mode-completion.close*
+    Called before each command while visible() returns true. It has to close
+    the menu without accepting an item and take back a preview of the item
+    in the text before it returns: the command edits the text next. A close
+    that finishes later would change the text after the command.
+
+==============================================================================
+5. KEYS                                                       *emacs-mode-keys*
 
 `C-` is CTRL, `M-` is ALT (Meta), `S-` is Shift. Keys after a comma do the
 same as the first.
@@ -219,7 +281,7 @@ puts a list marker, heading or quote mark at the start of a line. Code spans
 between backticks are not touched.
 
 ==============================================================================
-5. COMMANDS                                               *emacs-mode-commands*
+6. COMMANDS                                               *emacs-mode-commands*
 
 The names to use in |emacs-mode-aliases|, with the keys they have:
 
@@ -294,7 +356,7 @@ The names to use in |emacs-mode-aliases|, with the keys they have:
 `ctl_x` and `goto_prefix` are CTRL-X and ALT-G, which wait for a second key.
 
 ==============================================================================
-6. STATUS OF EMACS' KEYS                                    *emacs-mode-status*
+7. STATUS OF EMACS' KEYS                                    *emacs-mode-status*
 
 Supported ~
     The standard keys and aliases of GNU Emacs 30 in: moving and positions,
@@ -330,7 +392,7 @@ Intentional differences ~
       keys and completion settings leave plain Insert mode as it was.
     - Typing does not replace the selection, and ends it.
     - The goal column is released by CTRL-X CTRL-N where it is. A page scroll
-      with a goal column set is not animated by neoscroll.
+      with a goal column set is not given to |emacs-mode-scroll.run|.
     - CTRL-X f asks for the width, the cursor column being the default.
       Filling adds no second space after a sentence.
     - The mark is not set where ALT-<, ALT-> and ALT-G g came from.
@@ -345,7 +407,7 @@ Intentional differences ~
     - Case conversion is |toupper()| and |tolower()|: ß becomes ẞ, not SS.
 
 ==============================================================================
-7. TERMINALS                                             *emacs-mode-terminals*
+8. TERMINALS                                             *emacs-mode-terminals*
 
 A terminal that cannot tell two keys apart sends them as one, and one input
 gets one action here.
@@ -364,7 +426,7 @@ Give a key that works to the command with |emacs-mode-aliases|.
 |vim.on_key()| shows what arrives.
 
 ==============================================================================
-8. BEHAVIOR                                               *emacs-mode-behavior*
+9. BEHAVIOR                                               *emacs-mode-behavior*
 
 - A character is what |l| and |h| move over, composing characters and emoji
   sequences included. A word is a run of 'iskeyword' characters; Japanese
@@ -378,9 +440,9 @@ Give a key that works to the command with |emacs-mode-aliases|.
 - The mark and the selection are separate. The selection is highlighted with
   |hl-Visual|; moves stretch it, typing and the other commands end it, and
   typing does not replace it. The mark stays until the mode ends.
-- A completion menu is closed without accepting an item before a command.
+- A completion menu is closed without accepting an item before a command,
+  also that of a plugin with |emacs-mode-completion.close|.
 - |i_CTRL-O| runs a Normal mode command and comes back to the mode. Leaving
   the buffer or the window ends the mode.
-- The cursor is a block while the mode is on ('guicursor').
 
  vim:tw=78:ts=8:ft=help:norl:

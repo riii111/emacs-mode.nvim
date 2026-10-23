@@ -17,10 +17,11 @@ local defaults = {
 	start_key = false,
 	-- Terminals send C-SPC as NUL, which Neovim reads as <C-@>. macOS may take C-SPC to switch the input source.
 	set_mark = { "<C-Space>", "<C-@>" },
-	-- Animation time in milliseconds for C-v, M-v and C-l. Used only when neoscroll is loaded.
-	scroll_duration = 100,
 	-- Extra keys per command, as { command = { "<key>", ... } }, for keys the terminal sends differently.
 	aliases = {},
+	-- Hooks for a scrolling plugin and a completion plugin. See :help emacs-mode-hooks.
+	scroll = {},
+	completion = {},
 }
 local config = defaults
 
@@ -49,16 +50,59 @@ local function notify(message)
 end
 
 local editable, on_mode_changed, activate, restore, commands, close_completion
-local smooth_scrolling, stop_when_left
+local scroll_busy, stop_when_left
+
+local function emit(pattern)
+	vim.api.nvim_exec_autocmds("User", { pattern = pattern, modeline = false })
+end
+
+-- The Normal mode mapping of start_key that was in place before setup, if any, and the callback of ours that
+-- replaced it. A mapping of an earlier load of this module, left behind, is not worth keeping.
+local start_key_mapping
+
+local function global_normal_mapping(lhs)
+	local raw = vim.keycode(lhs)
+	for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
+		if mapping.lhsraw == raw or mapping.lhsrawalt == raw then
+			return mapping
+		end
+	end
+end
+
+local function map_start_key(start_key)
+	local previous = global_normal_mapping(start_key)
+	if previous and previous.desc == DESC then
+		previous = nil
+	end
+	local function callback()
+		return editable(0) and "<Cmd>lua require('emacs-mode').start()<CR>" or start_key
+	end
+	vim.keymap.set("n", start_key, callback, { expr = true, desc = DESC })
+	start_key_mapping = { lhs = start_key, callback = callback, previous = previous }
+end
+
+-- A mapping that something else put in place of ours since setup() stays as it is.
+local function unmap_start_key()
+	local ours = start_key_mapping
+	start_key_mapping = nil
+	if not ours then
+		return
+	end
+	local current = global_normal_mapping(ours.lhs)
+	if not (current and current.callback == ours.callback) then
+		return
+	end
+	vim.keymap.del("n", ours.lhs)
+	if ours.previous then
+		vim.fn.mapset("n", false, ours.previous)
+	end
+end
 
 function M.setup(opts)
 	M.teardown()
 	config = vim.tbl_extend("force", defaults, opts or {})
-	local start_key = config.start_key
-	if start_key then
-		vim.keymap.set("n", start_key, function()
-			return editable(0) and "<Cmd>lua require('emacs-mode').start()<CR>" or start_key
-		end, { expr = true, desc = DESC })
+	if config.start_key then
+		map_start_key(config.start_key)
 	end
 	vim.api.nvim_create_autocmd("ModeChanged", { group = group, callback = on_mode_changed })
 	vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
@@ -101,8 +145,8 @@ function M.setup(opts)
 	end, namespace)
 end
 
--- Keys are mapped after Insert mode starts. InsertEnter autocommands that map keys of their own, such as
--- blink.cmp's, have run by then.
+-- Keys are mapped after Insert mode starts. InsertEnter autocommands that map keys of their own, such as a
+-- completion plugin's, have run by then.
 function M.start()
 	local buf = vim.api.nvim_get_current_buf()
 	if state.active or not editable(buf) then
@@ -205,17 +249,14 @@ function M.stop()
 	spacing_cycle = nil
 	region.clear()
 	restore(active)
-	vim.cmd.redrawstatus()
+	emit("EmacsModeLeave")
 end
 
 function M.teardown()
 	M.stop()
 	vim.api.nvim_clear_autocmds({ group = group })
 	vim.on_key(nil, namespace)
-	local start_key = config.start_key
-	if start_key and vim.fn.maparg(start_key, "n", false, true).desc == DESC then
-		vim.keymap.del("n", start_key)
-	end
+	unmap_start_key()
 end
 
 function editable(buf)
@@ -226,14 +267,13 @@ local function in_normal_mode(mode)
 	return mode == "n" or mode == "nt" or vim.startswith(mode, "t")
 end
 
--- neoscroll animates C-v, M-v and C-l with :normal from a timer. Every step passes through Normal mode.
-function smooth_scrolling()
-	local scroll = package.loaded["neoscroll.scroll"]
-	return scroll ~= nil and scroll.scrolling
+function scroll_busy()
+	local busy = config.scroll.busy
+	return busy ~= nil and busy() == true
 end
 
--- Ends the mode if Neovim is still in Normal mode after the command that went there. A neoscroll step returns to
--- Insert mode before scheduled callbacks run. Normal mode at that point means the mode was left.
+-- Ends the mode if Neovim is still in Normal mode after the command that went there. A scroll step run from a timer
+-- returns to Insert mode before scheduled callbacks run. Normal mode at that point means the mode was left.
 function stop_when_left(active)
 	vim.schedule(function()
 		if state.active == active and in_normal_mode(vim.api.nvim_get_mode().mode) then
@@ -260,7 +300,7 @@ function on_mode_changed()
 		return
 	end
 	local old = vim.v.event.old_mode
-	if (vim.startswith(old, "i") or vim.startswith(old, "R")) and not smooth_scrolling() then
+	if (vim.startswith(old, "i") or vim.startswith(old, "R")) and not scroll_busy() then
 		M.stop()
 	else
 		-- i_CTRL-O passes through niI and the modes of its command, then returns to Insert mode. :normal also passes
@@ -287,13 +327,8 @@ local function completion_open()
 	if vim.fn.pumvisible() == 1 then
 		return true
 	end
-	if package.loaded["blink.cmp"] then
-		local ok, visible = pcall(function()
-			return require("blink.cmp").is_visible()
-		end)
-		return ok and visible
-	end
-	return false
+	local visible = config.completion.visible
+	return visible ~= nil and visible() == true
 end
 
 local function pass_through(lhs, mapping)
@@ -381,21 +416,11 @@ local function install(buf)
 	return saved, passed
 end
 
-local function block_cursor()
-	local guicursor = vim.o.guicursor
-	if guicursor == "" then
-		return nil
-	end
-	local block = guicursor .. ",i-ci:block"
-	vim.o.guicursor = block
-	return { saved = guicursor, set = block }
-end
-
 function activate(buf, win)
 	region.clear()
 	local saved, passed = install(buf)
-	state.active = { buf = buf, win = win, saved = saved, passed = passed, cursor = block_cursor() }
-	vim.cmd.redrawstatus()
+	state.active = { buf = buf, win = win, saved = saved, passed = passed }
+	emit("EmacsModeEnter")
 end
 
 local function ours(mapping)
@@ -403,14 +428,6 @@ local function ours(mapping)
 end
 
 function restore(active)
-	local cursor_shape = active.cursor
-	local scroll = package.loaded["neoscroll.scroll"]
-	if cursor_shape and vim.o.guicursor == cursor_shape.set then
-		vim.o.guicursor = cursor_shape.saved
-	elseif cursor_shape and scroll and scroll.scrolling and scroll.guicursor == cursor_shape.set then
-		-- neoscroll hides the cursor while scrolling and restores its saved guicursor when done. Replace that saved value.
-		scroll.guicursor = cursor_shape.saved
-	end
 	if active.unwrapped and vim.api.nvim_win_is_valid(active.win) and not vim.wo[active.win].wrap then
 		vim.wo[active.win].wrap = true
 	end
@@ -431,14 +448,9 @@ function restore(active)
 end
 
 function close_completion()
-	if package.loaded["blink.cmp"] then
-		-- blink.cmp's cancel() is deferred. It would undo the preview after this command has edited the text.
-		pcall(function()
-			if require("blink.cmp").is_visible() then
-				require("blink.cmp.completion.list").undo_preview()
-				require("blink.cmp.completion.trigger").hide()
-			end
-		end)
+	local hooks = config.completion
+	if hooks.visible and hooks.close and hooks.visible() then
+		hooks.close()
 	end
 	if vim.fn.pumvisible() == 1 then
 		vim.api.nvim_feedkeys(vim.keycode("<C-e>"), "ni", false)
@@ -661,20 +673,19 @@ local function converting_region(convert)
 	}
 end
 
-local function smooth(keys_to_press, animate)
+local function smooth(keys_to_press)
 	return function()
-		if package.loaded["neoscroll"] then
-			animate(require("neoscroll"))
-		else
+		local run = config.scroll.run
+		if not (run and run(keys_to_press)) then
 			normal(keys_to_press)
 		end
 	end
 end
 
--- With a goal column set, scroll without animation and move the cursor to the goal column. neoscroll would scroll
--- later, from a timer.
-local function paging(keys_to_press, animate)
-	local scroll = smooth(keys_to_press, animate)
+-- With a goal column set, scroll at once and move the cursor to the goal column. A scroll hook may scroll later, from
+-- a timer.
+local function paging(keys_to_press)
+	local scroll = smooth(keys_to_press)
 	return function(buf)
 		local goal = vim.b[buf].emacs_goal_column
 		if goal then
@@ -686,17 +697,8 @@ local function paging(keys_to_press, animate)
 	end
 end
 
-local scroll_down = paging("<C-f>", function(neoscroll)
-	neoscroll.ctrl_f({ duration = config.scroll_duration })
-end)
-local scroll_up = paging("<C-b>", function(neoscroll)
-	neoscroll.ctrl_b({ duration = config.scroll_duration })
-end)
-local function recenter(keys_to_press)
-	return smooth(keys_to_press, function(neoscroll)
-		neoscroll[keys_to_press]({ half_win_duration = config.scroll_duration })
-	end)
-end
+local scroll_down = paging("<C-f>")
+local scroll_up = paging("<C-b>")
 
 -- Scrolls sideways by the window width less 2, like Emacs. Wrapped lines cannot scroll sideways. Wrapping is turned
 -- off for the window until the text is back at the left or the mode ends.
@@ -1003,7 +1005,7 @@ commands = {
 	scroll_up = { keeps_region = true, motion = true, run = scroll_up },
 	scroll_left = scrolling_sideways("zl"),
 	scroll_right = scrolling_sideways("zh"),
-	recenter = cycling({ recenter("zz"), recenter("zt"), recenter("zb") }),
+	recenter = cycling({ smooth("zz"), smooth("zt"), smooth("zb") }),
 	-- Emacs puts the cursor at the start of the line
 	move_to_window_line = vim.tbl_extend("force", cycling({ "M0", "H0", "L0" }), { motion = true }),
 	set_mark = {
