@@ -56,7 +56,6 @@ function M.setup(opts)
 	config = vim.tbl_extend("force", defaults, opts or {})
 	local start_key = config.start_key
 	if start_key then
-		-- Buffers that are not for editing text keep the key's own meaning.
 		vim.keymap.set("n", start_key, function()
 			return editable(0) and "<Cmd>lua require('emacs-mode').start()<CR>" or start_key
 		end, { expr = true, desc = DESC })
@@ -874,7 +873,6 @@ commands = {
 	backward_sentence = moving(motion.backward_sentence),
 	forward_sentence = moving(motion.forward_sentence),
 	back_to_indentation = moving(motion.back_to_indentation),
-	-- These commands read keys for their prompts.
 	goto_prefix = { reads_key = true, prefix = keys.prefixes["<M-g>"] },
 	ctl_x = { reads_key = true, prefix = keys.prefixes["<C-x>"] },
 	goto_line = {

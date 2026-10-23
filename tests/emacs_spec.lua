@@ -375,7 +375,6 @@ cases["the region from the mark is killed, copied or dropped"] = function()
 
 	edit.store("kept", "replace")
 	check("ab|cd", "<C-Space><C-w>", "ab|cd", "kept")
-	-- C-y ends the region. C-w then kills the word.
 	check("ab|cd", "<C-Space><C-y><C-b><C-w>", "|tcd", "abkep")
 	check("foo bar|", "<C-w>", "foo |", "bar")
 
@@ -747,7 +746,6 @@ cases["C-v, M-v, C-l and M-r work on the window"] = function()
 		eq({ 11, 11, 0, 1, true }, at("down"), "C-v")
 		eq({ 21, 21, 0, 1, true }, at("down2"), "C-v again")
 	else
-		-- A window of 10 lines scrolls by 8 and keeps 2 lines on the screen.
 		eq({ 9, 9, 0, 1, true }, at("down"), "C-v")
 		eq({ 17, 17, 0, 1, true }, at("down2"), "C-v again")
 	end
