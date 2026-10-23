@@ -42,3 +42,6 @@ luac.out
 
 # Neovim help tags
 doc/tags
+
+# Neovim logs
+nvim.log
