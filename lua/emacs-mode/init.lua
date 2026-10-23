@@ -49,7 +49,6 @@ local function notify(message)
 	vim.api.nvim_echo({ { message } }, false, {})
 end
 
--- defined below, in the order the mode goes through them
 local editable, on_mode_changed, activate, restore, commands, close_completion
 local smooth_scrolling, stop_when_left
 
@@ -155,7 +154,6 @@ local function execute(buf, name, command, shifted)
 	end
 	command.run(buf, pos)
 	last_command = { name = name, key_sequence = key_sequence }
-	-- moves stretch the selection; anything else ends it, and the mark stays
 	if command.keeps_region or shifted then
 		region.draw(buf, cursor(), true)
 	else
@@ -370,23 +368,20 @@ local function install(buf)
 	local saved, passed = {}, {}
 	vim.api.nvim_buf_call(buf, function()
 		for lhs, entry in pairs(key_table()) do
-			-- a key given twice would save the mode's own mapping and put it back when the mode ends
-			if saved[lhs] == nil then
-				local mapping = vim.fn.maparg(lhs, "i", false, true)
-				saved[lhs] = mapping.buffer == 1 and mapping or false
-				passed[lhs] = next(mapping) ~= nil and mapping or nil
-				local options = { buffer = buf, nowait = true, silent = true, desc = DESC }
-				local keys_of_command = rhs(entry.name, entry.shifted)
-				if keys.completion[lhs] then
-					-- without the brackets, which would be read as a key
-					keys_of_command = ("<Cmd>lua require('emacs-mode').completion_key(%q, %q, %s)<CR>"):format(
-						lhs:sub(2, -2),
-						entry.name,
-						entry.shifted and "true" or "false"
-					)
-				end
-				vim.keymap.set("i", lhs, keys_of_command, options)
+			local mapping = vim.fn.maparg(lhs, "i", false, true)
+			saved[lhs] = mapping.buffer == 1 and mapping or false
+			passed[lhs] = next(mapping) ~= nil and mapping or nil
+			local options = { buffer = buf, nowait = true, silent = true, desc = DESC }
+			local keys_of_command = rhs(entry.name, entry.shifted)
+			if keys.completion[lhs] then
+				-- without the brackets, which would be read as a key
+				keys_of_command = ("<Cmd>lua require('emacs-mode').completion_key(%q, %q, %s)<CR>"):format(
+					lhs:sub(2, -2),
+					entry.name,
+					entry.shifted and "true" or "false"
+				)
 			end
+			vim.keymap.set("i", lhs, keys_of_command, options)
 		end
 	end)
 	return saved, passed
@@ -459,7 +454,6 @@ end
 
 local CANCELLED = "\1"
 
--- Returns nil when given up with Esc.
 local function ask(prompt, default)
 	local pos = cursor()
 	local ok, answer = pcall(vim.fn.input, { prompt = prompt, default = default or "", cancelreturn = CANCELLED })

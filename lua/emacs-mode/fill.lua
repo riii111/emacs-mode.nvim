@@ -7,7 +7,6 @@ local M = {}
 
 local cjk, first_char, last_char = chars.cjk, chars.first, chars.last
 
--- declared first so that M.fill leads the file
 local fill_unit
 
 -- Fills the paragraphs that overlap the rows from..to. Returns the replacements { first, last, lines, count, place }
@@ -343,6 +342,15 @@ local function atoms_of(text)
 			table.insert(atoms, current)
 			current = nil
 		end
+	end
+	local function open_atom(atom_text, is_cjk)
+		local previous = atoms[#atoms]
+		local gap = ""
+		if previous and pending > 0 then
+			gap = (pending >= 2 and ends_sentence(previous.text)) and "  " or " "
+		end
+		current = { text = atom_text, gap = gap, cjk = is_cjk }
+		pending = 0
 	end
 	local all = chars.split(text)
 	local index = 0
